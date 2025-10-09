@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/CASTOR-telescope/ETC"
+Homepage = "https://github.com/garethjones210/ETC"
 
 [tool.hatch.version]
 source = "vcs"
