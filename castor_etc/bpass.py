@@ -78,7 +78,7 @@ from numbers import Number
 import astropy.units as u
 import numpy as np
 
-from sources import Profiles, PointSource, ExtendedSource, GalaxySource
+from .sources import Profiles, PointSource, ExtendedSource, GalaxySource
 
 
 def make_bpass_source(base_source, model_parameters):
