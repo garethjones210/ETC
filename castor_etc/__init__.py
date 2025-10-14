@@ -75,6 +75,7 @@ Contact: isaac.cheng.ca@gmail.com
 
 __all__ = [
     "background",
+    "bpass",
     "constants",
     "conversions",
     "data",
@@ -91,6 +92,7 @@ __all__ = [
 
 from . import (
     background,
+    bpass,
     constants,
     conversions,
     data,
