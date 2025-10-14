@@ -59,25 +59,6 @@
 # <http://www.gnu.org/licenses/>.      <http://www.gnu.org/licenses/>.
 
 """
-Data Utilities
-==============
-
-Data files for defining CASTOR parameters
-
-Includes:
-  - Background noise estimates
-  - Passband response curves
-  - Spectral energy distributions
+BPASS stellar population models
+===============================
 """
-
-__all__ = [
-    "UVMOS_data",
-    "galaxy_spectra",
-    "passbands",
-    "pickles_spectra",
-    "psfs",
-    "sky_background",
-    "bpass_files",
-]
-
-from . import UVMOS_data, galaxy_spectra, passbands, pickles_spectra, psfs, sky_background, bpass_files
