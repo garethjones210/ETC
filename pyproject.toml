@@ -64,3 +64,6 @@ python = ["3.11", "3.12"]
 dependencies = [
     "sphinx"
 ]
+
+[tool.hatch.envs.default]
+python = "3.11"
