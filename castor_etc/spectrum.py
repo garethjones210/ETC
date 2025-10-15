@@ -1688,7 +1688,7 @@ class SpectrumMixin:
         # Checking that the other input parameters are sensible
 
         # Loading in the BPASS file from the data folder
-        if self.pars["type"] = "single":
+        if self.pars["type"] == "single":
             filepath = join(DATAPATH, "bpass_files", "bpass_sin-imf135_300_stellar_grids.fits")
         else:
             filepath = join(DATAPATH, "bpass_files", "bpass_bin-imf135_300_stellar_grids.fits")
