@@ -107,7 +107,6 @@ def make_bpass_source(base_source, model_parameters):
       TODO
       """
       self.pars = model_parameters
-      print(f"BPASSSource created with model_parameters={model_parameters}, from {base_source.__name__}")
       super().__init__(*args, **kwargs)
     
   return BPASSSource
