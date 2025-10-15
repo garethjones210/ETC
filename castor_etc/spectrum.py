@@ -1662,6 +1662,54 @@ class SpectrumMixin:
         self.wavelengths = (data[0].values * u.nm).to(u.AA)
         self.spectrum = data[1].values
 
+
+    def gen_bpass_spec(self):
+        """
+        Generates the BPASS stellar population model spectrum based upon the parameters
+        provided in the model component dictionary. This function is called by BPASSSource
+        class to generate a spectrum associated with that class. This function loads in
+        the BPASS models (single or binary, can be selected), and applies a star-fromation
+        history, dust attenuation, IGM attenuation and nebular attenuation and emission.
+        """
+        #
+        # Check inputs
+        #
+
+        # Checking whether there is a current spectrum and if the input parameters include
+        # overwriting the current spectrum
+        overwrite = False
+        quiet = False
+        if "overwrite" in list(self.pars):
+            overwrite = self.pars["overwrite"]
+        if "quiet" in list(self.pars):
+            quiet = self.pars["quiet"]
+        self._check_existing_spectrum(overwrite, quiet=quiet)
+
+        # Checking that the other input parameters are sensible
+
+        # Loading in the BPASS file from the data folder
+        if self.pars["type"] = "single":
+            filepath = join(DATAPATH, "bpass_files", "bpass_sin-imf135_300_stellar_grids.fits")
+        else:
+            filepath = join(DATAPATH, "bpass_files", "bpass_bin-imf135_300_stellar_grids.fits")
+        
+        # Metallicities of the BPASS stellar models
+        mets = np.array([1.e-5, 1.e-4, 0.001, 0.002, 0.003, 0.004,
+                         0.006, 0.008, 0.010, 0.014, 0.020, 0.030, 0.040])
+        
+        # Wavelengths of each point in the spectrum in units of Angstroms
+        self.wavelengths = fits.open(filepath)[-1].data * u.AA
+
+        # Ages of each SSP model in BPASS in Gyr
+        mod_ages = fits.open(filepath)[-2].data
+
+        # SSP stellar model grids, stored as FITS HDUList, with each HDU
+        # representing a different metallicity. Axis 0 of each grid runs
+        # over wavelength and axis 1 runs over age
+        ssp_grid = fits.open(filepath)[1:14]
+
+
+
     def _calc_xy(self):
         """
         Internal function that converts (ra, dec) of the identified Gaia sources to pixel
