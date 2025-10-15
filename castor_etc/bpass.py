@@ -77,9 +77,18 @@ import warnings
 from numbers import Number
 
 import astropy.units as u
+from astropy.cosmology import FlatLambdaCDM
 import numpy as np
 
 from .sources import Profiles, PointSource, ExtendedSource, GalaxySource
+
+
+class star_formation_history:
+  """ 
+  Class to hold all the different star-formation history models. To be used with
+  the BPASSSource class.
+  """
+
 
 
 def make_bpass_source(base_source, model_parameters):
@@ -98,7 +107,7 @@ def make_bpass_source(base_source, model_parameters):
       Dictionary containing the model parameters to generate a BPASS spectrum.
       Keys are strings and values are floats.
   """
-  class BPASSSource(base_source):
+  class BPASSSource(base_source, star_formation_history):
     """
     TODO
     """
@@ -106,8 +115,35 @@ def make_bpass_source(base_source, model_parameters):
       """
       TODO
       """
+      # Storing the model parameter dictionary as part of the class
       self.pars = model_parameters
+
+      # Checking that a redshift has been included as one of the parameters
+      # and is a float greater than one
+      try:
+        self.redshift = self.pars['redshift']
+      except:
+        raise ValueError("The model parameters dictionary needs " +\
+                         "`redshift` to be a definied key.")
+      
+      if not (self.redshift >= 0.):
+        raise ValueError("The model parameter `redshift` needs to be " +\
+                          "a float value greater than or equal to 0.")
+      
+      # Initialising the main source
       super().__init__(*args, **kwargs)
+
+      # Initialising the cosmology of the Universe, which will be used for
+      # calculating the age of the Universe and distance luminoisty
+      self.cosmo = FlatLambdaCDM(H0=70, Tcmb0=2.725, Om0=0.3)
+
+      # Age of the Universe at the given redshift
+      self.uni_age = self.cosmo.age(self.redshift).value
+
+      # Luminoisty distance at the given redshift
+      self.ldist = self.cosmo.luminosity_distance(self.redshift).value
+
+      # Generating the spectrum from the function in the spectrum.py program
       self.gen_bpass_spec()
     
   return BPASSSource
