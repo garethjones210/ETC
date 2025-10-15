@@ -108,6 +108,7 @@ def make_bpass_source(base_source, model_parameters):
       """
       self.pars = model_parameters
       super().__init__(*args, **kwargs)
+      self.gen_bpass_spec()
     
   return BPASSSource
 
