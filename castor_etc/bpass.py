@@ -67,8 +67,9 @@ It inherits one of the classes from the `castor_etc.sources`, and then calculate
 spectrum using the BPASS models.
 
 This includes two function
+  - gen_bpass_spec
   - make_bpass_source
-  - make_and_init_bpass TODO - RENAME
+  - BPASS_spec
 """
 
 import os
@@ -82,65 +83,65 @@ from .sources import Profiles, PointSource, ExtendedSource, GalaxySource
 
 
 def make_bpass_source(base_source, model_parameters):
-    """
-    Generates a BPASS stellar population model spectrum based upon the parameters
-    provided in the model component dictionary. This function inherits its class
-    from one of the source classes in the file `castor_etc.sources`.
+  """
+  Generates a BPASS stellar population model spectrum based upon the parameters
+  provided in the model component dictionary. This function inherits its class
+  from one of the source classes in the file `castor_etc.sources`.
 
-    Parameters
-    ----------
-        base_source :: PointSource, ExtendedSource, GalaxySource
-            The source class which the BPASS class will inherit (i.e. whether you
-            want to spectrum represented as a point, extended or galaxy source)
+  Parameters
+  ----------
+    base_source :: PointSource, ExtendedSource, GalaxySource
+      The source class which the BPASS class will inherit (i.e. whether you
+      want to spectrum represented as a point, extended or galaxy source)
         
-        model_parameters :: dict
-            Dictionary containing the model parameters to generate a BPASS spectrum.
-            Keys are strings and values are floats.
+    model_parameters :: dict
+      Dictionary containing the model parameters to generate a BPASS spectrum.
+      Keys are strings and values are floats.
+  """
+  class BPASSSource(base_source):
     """
-    class BPASSSource(base_source):
-        """
-        TODO
-        """
-        def __init__(self, *args, **kwargs):
-            """
-            TODO
-            """
-            self.model_parameters = model_parameters
-            print(f"BPASSSource created with model_parameters={model_parameters}, from {base_source.__name__}")
-            super().__init__(*args, **kwargs)
+    TODO
+    """
+    def __init__(self, *args, **kwargs):
+      """
+      TODO
+      """
+      self.pars = model_parameters
+      print(f"BPASSSource created with model_parameters={model_parameters}, from {base_source.__name__}")
+      super().__init__(*args, **kwargs)
     
-    return BPASSSource
+  return BPASSSource
 
 
-def make_and_init_bpass(base_source, model_parameters, *args, **kwargs):
-    """
-    Makes and initialises the BPASS source class and the class it inherits from, 
-    generated in the function `make_bpass_source` above.
+def BPASS_spec(base_source, model_parameters, *args, **kwargs):
+  """
+  Makes and initialises the BPASS source class and the class it inherits from, 
+  generated in the function `make_bpass_source` above.
 
-    Parameters
-    ----------
-        base_source :: PointSource, ExtendedSource, GalaxySource
-            The source class which the BPASS class will inherit (i.e. whether you
-            want to spectrum represented as a point, extended or galaxy source)
+  Parameters
+  ----------
+    base_source :: PointSource, ExtendedSource, GalaxySource
+      The source class which the BPASS class will inherit (i.e. whether you
+      want to spectrum represented as a point, extended or galaxy source)
         
-        model_parameters :: dict
-            Dictionary containing the model parameters to generate a BPASS spectrum.
-            Keys are strings and values are floats.
+    model_parameters :: dict
+      Dictionary containing the model parameters to generate a BPASS spectrum.
+      Keys are strings and values are floats.
         
-        *args :: tuple
-            Parameters required to initialise the source class
+    *args :: tuple
+      Parameters required to initialise the source class
 
-        **kwargs :: dict
-            Parameters required to initialise the source class
+    **kwargs :: dict
+      Parameters required to initialise the source class
     
-    Returns
-    -------
-        bpass_class :: class
-            An initialised source class which includes a BPASS spectrum profile to
-            model the emission profile
-    """
-    # Creating the BPASS source class and BPASS spectrum profile
-    bpass_class = make_bpass_source(base_source, model_parameters)
+  Returns
+  -------
+    bpass_class :: class
+      An initialised source class which includes a BPASS spectrum profile to
+      model the emission profile
+  """
+  # Creating the BPASS source class and BPASS spectrum profile
+  bpass_class = make_bpass_source(base_source, model_parameters)
 
-    # Initialising the inherited class and returning the result
-    return bpass_class(*args, **kwargs)
+  # Initialising the inherited class and returning the result
+  return bpass_class(*args, **kwargs)
