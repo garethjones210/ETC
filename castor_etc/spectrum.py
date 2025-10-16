@@ -1671,9 +1671,7 @@ class SpectrumMixin:
         the BPASS models (single or binary, can be selected), and applies a star-fromation
         history, dust attenuation, IGM attenuation and nebular attenuation and emission.
         """
-        #
         # Check inputs
-        #
 
         # Checking whether there is a current spectrum and if the input parameters include
         # overwriting the current spectrum
@@ -1685,28 +1683,66 @@ class SpectrumMixin:
             quiet = self.pars["quiet"]
         self._check_existing_spectrum(overwrite, quiet=quiet)
 
-        # Checking that the other input parameters are sensible
+        # Checking that the age is included and not larger than the age of the Universe
+        try:
+            self.pop_age = self.pars["age"]
+        except:
+            raise ValueError("The model parameters dictionary needs " +\
+                               "`age` to be a definied key.")
+        if self.pop_age > self.uni_age:
+            raise ValueError(f"The inputted age of {self.pop_age} Gyr is " +\
+                              "greater than the age of the Universe " +\
+                              f"({round(self.uni_age, 3)} Gyr) at redshift " +\
+                              f"{self.redshift}")
 
         # Loading in the BPASS file from the data folder
-        if self.pars["type"] == "single":
+        if "type" in list(self.pars) and self.pars["type"] == "single":
             filepath = join(DATAPATH, "bpass_files", "bpass_sin-imf135_300_stellar_grids.fits")
         else:
             filepath = join(DATAPATH, "bpass_files", "bpass_bin-imf135_300_stellar_grids.fits")
+
+        # TODO - Add functionaility to ensure that the file selected is included in the data directory
         
         # Metallicities of the BPASS stellar models
-        mets = np.array([1.e-5, 1.e-4, 0.001, 0.002, 0.003, 0.004,
+        self.mets = np.array([1.e-5, 1.e-4, 0.001, 0.002, 0.003, 0.004,
                          0.006, 0.008, 0.010, 0.014, 0.020, 0.030, 0.040])
         
         # Wavelengths of each point in the spectrum in units of Angstroms
-        self.wavelengths = fits.open(filepath)[-1].data * u.AA
+        self.wavelengths = fits.open(filepath)[-1].data
 
         # Ages of each SSP model in BPASS in Gyr
-        mod_ages = fits.open(filepath)[-2].data
+        self.bpass_ages = fits.open(filepath)[-2].data
 
         # SSP stellar model grids, stored as FITS HDUList, with each HDU
         # representing a different metallicity. Axis 0 of each grid runs
         # over wavelength and axis 1 runs over age
-        ssp_grid = fits.open(filepath)[1:14]
+        ssp_grids = fits.open(filepath)[1:14]
+
+        # Generating the star formation history profile and calculating 
+        # the star formation rate for each SSP model age
+        self.make_sfh_profile()
+
+        # Separating the SFH profile weightings into individual weightings
+        # for each metallicity SSP grid, using either a fixed or evolving
+        # metallicity input
+        self.make_ceh_profile()
+
+        # Using the SFH and CEH weightings to combine the SSP models into
+        # a single CSP model
+        self.spectrum = np.zeros_like(self.wavelengths)
+
+        # Looping over the metallicity SSP models
+        for i, ssp_model in enumerate(ssp_grids):
+            if self.sfh_ceh_grid[i].sum() > 0.:
+                self.spectrum += np.sum(ssp_model * self.sfh_ceh_grid[i])
+
+        # IGM attenuation
+
+        # Dust attenuation
+
+        # Nebular
+
+        # Redshift to capture observed galaxy
 
 
 
