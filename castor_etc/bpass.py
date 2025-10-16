@@ -86,9 +86,218 @@ from .sources import Profiles, PointSource, ExtendedSource, GalaxySource
 class star_formation_history:
   """ 
   Class to hold all the different star-formation history models. To be used with
-  the BPASSSource class.
+  the BPASSSource class. Also includes the functions to combine the star formation
+  history with the chemical evolution history to generate weights for both the
+  metallicity files and the ages.
   """
+  def make_sfh_profile(self):
+    """
+    TODO
+    """
+    # Creating a finely sampled age array. This is done over the
+    # same range as the BPASS grid (1 Myr to 100 Gyr), but with 
+    # a much finer log sampling (0.001 instead of 0.1)
+    self.sfh_ages = np.arange(6., 11., 0.001)
 
+    # Converting from log space
+    self.sfh_ages = 10**self.sfh_ages
+
+    # Initialising width of time bin array
+    self.time_bins = np.zeros_like(self.sfh_ages)
+
+    # Calculating the total age width of each SSP model
+    self.time_bins[0] = self.sfh_ages[0] + (self.sfh_ages[1] - self.sfh_ages[0])/2.
+    self.time_bins[1:-1] = (self.sfh_ages[2:] - self.sfh_ages[:-2])/2.
+    self.time_bins[-1] = self.sfh_ages[-1] - self.sfh_ages[-2]
+
+    # Initialising star formation rate array for the SFH
+    self.sfr = np.zeros_like(self.sfh_ages)
+
+    # Getting the inputted SFH model chosen
+    sfh_model = self.pars["sfh_model"]
+
+    # Permitted SFH models
+    sfh_dir = np.array(["burst", "constant", "delayed", "custom"])
+
+    # Checking that the chosen SFH is valid
+    if not sfh_model in sfh_dir:
+      raise ValueError(f"The chosen SFH model of {sfh_model} is " +\
+                       "not permitted. Please chosen one of the " +\
+                       f"following SFH models: {sfh_dir}")
+    
+    # Calling function to generated chosen SFH profile
+    getattr(self, sfh_model)(self.sfr, self.pars)
+
+    # Getting the mass normalisation
+    mass_norm = np.sum(self.sfr * self.time_bins)
+
+    # Setting the total mass as 1 Solar mass
+    mass = 1.
+
+    # Checking whether the mass was inputted in the dictionary
+    if "mass" in list(self.pars):
+      mass = self.pars["mass"]
+    
+    # Normalising the SFH is the correct total mass
+    self.sfr *= mass/mass_norm
+
+    # Creating the weights for the simple stellar population models
+    # by summing up the contributions within each bin
+    wei = self.sfr * self.time_bins
+
+    # Calculating the bins for the SPS model grid
+    self.sps_bins = np.zeros_like(self.bpass_ages.shape[0] + 1)
+    self.sps_bins[0] = 0.
+    self.sps_bins[1:-1] = (self.bpass_ages[1:] + self.bpass_ages[:-1])/2.
+    self.sps_bins[-1] = self.bpass_ages[-1]
+
+    # Mapping the weights from the finely sample array to the SPS
+    # model grid by adding using a histogram
+    self.weights = np.histogram(self.time_bins, bins=self.sps_bins, 
+                                weights=wei)[0]
+
+
+  def burst(self, sfr, pars):
+    """
+    A burst of star formation at one specific age,
+    defined by a delta function.
+    """
+    # Getting the chosen input age
+    burst_age = pars["age"] * 1.e9
+
+    # Finding the age bin which is closest to the inputted age
+    # and putting all star-formation into that one bin
+    sfr[np.argmin(np.abs(self.ages-burst_age))] += 1
+  
+
+  def constant(self, sfr, pars):
+    """
+    A constant star formation between the two age limits, with age
+    representing the oldest stellar population created and age_min
+    representing the youngest stellar population created.
+    """
+    # Getting the chosen input age
+    age_max = pars["age"] * 1.e9
+
+    # Setting the minimum age as zero
+    age_min = 0.
+
+    # Checking whether the minimum age was set as an input
+    if "age_min" in list(pars):
+      age_min = pars["age_min"]
+
+    # Creating a mask to only include ages betwen the max and min
+    mask = (self.sfh_ages > age_min) & (self.sfh_ages < age_max)
+
+    # Setting the SFR at ages between the max and min age as equal
+    sfr[mask] +=1
+
+
+  def delayed(self, sfr, pars):
+    """
+    A delayed-tau star formation history profile following the equation
+    SFR ~ t*e^(-t/tau), where t is the time since star formation started,
+    and tau is the characteristic timescale of decrease in the SFR.
+    """
+    # Getting the chosen input age
+    age_max = pars["age"] * 1.e9
+
+    # Setting the tau value as the default value
+    tau = 1.e9
+
+    # Checking whether tau was set as an input
+    if "tau" in list(pars):
+      tau = pars["tau"]
+
+    # Calculating the time since star formation started
+    time = age_max - self.sfh_ages[self.sfh_ages < age_max]
+
+    # Calculating the delayed SFH profile SFR in each time bin
+    sfr[self.sfh_ages < age_max] = time * np.exp(-time/tau)
+
+
+  def custom(self, sfr, pars):
+    """
+    Custom star formation history profile inputted by the user.
+    TODO
+    """
+    raise ValueError("This is still a work in progress. Please check " +\
+                     "again soon and hopefully it will be implemented.")
+  
+
+  def make_ceh_profile(self):
+    """
+    TODO
+    """
+    # Making a 2D array to store the SFH weights as a function of metallicity,
+    # where axis zero runs along metallicity, and axis one runs along the ages
+    # of the SSP model grid
+    self.sfh_ceh_grid = np.zeros((len(self.mets), len(self.bpass_ages)))
+
+    # Checking whether to run the fixed or evolving metallicity function
+    if "met_mode" in list (self.pars):
+      if self.pars["met_mode"] == "fixed":
+        self.fixed_met()
+      elif self.pars["met_mode"] == "evolving":
+        self.evolving_met()
+      else:
+        raise ValueError(f"The input metallicity mode of {pars["met_mode"]} " +\
+                         "is invalid. Please use either `fixed` or `evolving`.")
+    else:
+      self.fixed_met()
+  
+
+  def fixed_met(self):
+    """
+    Function to distribute the SFR between the two adjacent metallicity SSP
+    models when a fixed metallicity is inputted
+    """
+    # Getting the chosen metallicity and checking that it is valid
+    try:
+      self.input_met = self.pars["metallicity"]
+    except:
+      raise ValueError("The model parameters dictionary needs " +\
+                         "`metallicity` to be a definied key.")
+    if not isinstance(self.input_met, (int, float)):
+      raise ValueError("The fixed metallicity assumption requires " +\
+                       "the inputted metallicity to be a single " +\
+                       "float value.")
+    if self.input_met < self.mets[0] or self.input_met > self.mets[-1]:
+      raise ValueError("The inputted metallicity is outside the grid. " +\
+                       "Please ensure the metallicity is between " +\
+                       f"{self.mets[0]} and {self.mets[-1]}.")
+    
+    # Setting up a metallicity weights dictionary
+    weights = np.zeros_like(self.mets)
+    
+    # Determining the upper grid metallicity points
+    up_ind = self.mets[self.mets < self.input_met].shape[0]
+
+    # If lowest metallicity is chosen:
+    if up_ind == 0:
+      # Set all weights in the lowest metallicity bin
+      self.sfh_ceh_grid[0] = self.weights
+    else:
+      # Split the weighting between the two nearest bins
+      
+      # Calculating the metallicity bin width
+      met_width = self.mets[up_ind] - self.mets[up_ind - 1]
+
+      # Calculating the weighting for the upper metallicity
+      up_wei = (self.input_met - self.mets[up_ind - 1])/met_width
+
+      # Combining metallicity weighting with the SFH weight to determine
+      # the overall weighting for each time bin in each SSP model\
+      self.sfh_ceh_grid[up_ind] = self.weights * up_wei
+      self.sfh_ceh_grid[up_ind - 1] = self.weights * (1 - up_wei)
+
+
+  def evolving_met(self):
+    """
+    TODO
+    """
+    # Will write code here later
+    raise ValueError("Need to sort later, check in again soon!")
 
 
 def make_bpass_source(base_source, model_parameters):
@@ -137,10 +346,10 @@ def make_bpass_source(base_source, model_parameters):
       # calculating the age of the Universe and distance luminoisty
       self.cosmo = FlatLambdaCDM(H0=70, Tcmb0=2.725, Om0=0.3)
 
-      # Age of the Universe at the given redshift
+      # Age of the Universe at the given redshift in Gyr
       self.uni_age = self.cosmo.age(self.redshift).value
 
-      # Luminoisty distance at the given redshift
+      # Luminoisty distance at the given redshift in Mpc
       self.ldist = self.cosmo.luminosity_distance(self.redshift).value
 
       # Generating the spectrum from the function in the spectrum.py program
