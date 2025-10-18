@@ -1698,6 +1698,8 @@ class SpectrumMixin:
         # Loading in the BPASS file from the data folder
         if "type" in list(self.pars) and self.pars["type"] == "single":
             filepath = join(DATAPATH, "bpass_files", "bpass_sin-imf135_300_stellar_grids.fits")
+        elif "type" in list(self.pars) and not self.pars["type"] == "binary":
+            raise ValueError(f"SPS model type `{self.pars['type']}` is not valid.")
         else:
             filepath = join(DATAPATH, "bpass_files", "bpass_bin-imf135_300_stellar_grids.fits")
 
@@ -1716,7 +1718,10 @@ class SpectrumMixin:
         # SSP stellar model grids, stored as FITS HDUList, with each HDU
         # representing a different metallicity. Axis 0 of each grid runs
         # over wavelength and axis 1 runs over age
-        ssp_grids = fits.open(filepath)[1:14]
+        ssp_hdus = fits.open(filepath)[1:14]
+
+        # Extracting the data arrays
+        ssp_grid = np.array([hdu.data.T for hdu in ssp_hdus])
 
         # Generating the star formation history profile and calculating 
         # the star formation rate for each SSP model age
@@ -1732,9 +1737,9 @@ class SpectrumMixin:
         self.spectrum = np.zeros_like(self.wavelengths)
 
         # Looping over the metallicity SSP models
-        for i, ssp_model in enumerate(ssp_grids):
+        for i, ssp_model in enumerate(ssp_grid):
             if self.sfh_ceh_grid[i].sum() > 0.:
-                self.spectrum += np.sum(ssp_model * self.sfh_ceh_grid[i])
+                self.spectrum += np.sum(ssp_model * self.sfh_ceh_grid[i], axis=1)
 
         # IGM attenuation
 
