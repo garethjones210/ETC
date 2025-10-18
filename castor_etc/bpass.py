@@ -103,18 +103,22 @@ class star_formation_history:
     self.sfh_ages = 10**self.sfh_ages
 
     # Initialising width of time bin array
-    self.time_bins = np.zeros_like(self.sfh_ages)
+    self.time_widths = np.zeros_like(self.sfh_ages)
 
     # Calculating the total age width of each SSP model
-    self.time_bins[0] = self.sfh_ages[0] + (self.sfh_ages[1] - self.sfh_ages[0])/2.
-    self.time_bins[1:-1] = (self.sfh_ages[2:] - self.sfh_ages[:-2])/2.
-    self.time_bins[-1] = self.sfh_ages[-1] - self.sfh_ages[-2]
+    self.time_widths[0] = self.sfh_ages[0] + (self.sfh_ages[1] - self.sfh_ages[0])/2.
+    self.time_widths[1:-1] = (self.sfh_ages[2:] - self.sfh_ages[:-2])/2.
+    self.time_widths[-1] = self.sfh_ages[-1] - self.sfh_ages[-2]
 
     # Initialising star formation rate array for the SFH
     self.sfr = np.zeros_like(self.sfh_ages)
 
     # Getting the inputted SFH model chosen
-    sfh_model = self.pars["sfh_model"]
+    try:
+      sfh_model = self.pars["sfh_model"]
+    except:
+      raise ValueError("The model parameters dictionary needs " +\
+                         "`metallicity` to be a definied key.")
 
     # Permitted SFH models
     sfh_dir = np.array(["burst", "constant", "delayed", "custom"])
@@ -129,10 +133,10 @@ class star_formation_history:
     getattr(self, sfh_model)(self.sfr, self.pars)
 
     # Getting the mass normalisation
-    mass_norm = np.sum(self.sfr * self.time_bins)
+    mass_norm = np.sum(self.sfr * self.time_widths)
 
     # Setting the total mass as 1 Solar mass
-    mass = 1.
+    mass = 1. #TODO Could change this to a notification if mass is not set
 
     # Checking whether the mass was inputted in the dictionary
     if "mass" in list(self.pars):
@@ -143,17 +147,17 @@ class star_formation_history:
 
     # Creating the weights for the simple stellar population models
     # by summing up the contributions within each bin
-    wei = self.sfr * self.time_bins
+    wei = self.sfr * self.time_widths
 
     # Calculating the bins for the SPS model grid
-    self.sps_bins = np.zeros_like(self.bpass_ages.shape[0] + 1)
+    self.sps_bins = np.zeros(len(self.bpass_ages) + 1)
     self.sps_bins[0] = 0.
     self.sps_bins[1:-1] = (self.bpass_ages[1:] + self.bpass_ages[:-1])/2.
     self.sps_bins[-1] = self.bpass_ages[-1]
 
     # Mapping the weights from the finely sample array to the SPS
     # model grid by adding using a histogram
-    self.weights = np.histogram(self.time_bins, bins=self.sps_bins, 
+    self.sfr_weights = np.histogram(self.sfh_ages, bins=self.sps_bins, 
                                 weights=wei)[0]
 
 
@@ -167,7 +171,7 @@ class star_formation_history:
 
     # Finding the age bin which is closest to the inputted age
     # and putting all star-formation into that one bin
-    sfr[np.argmin(np.abs(self.ages-burst_age))] += 1
+    sfr[np.argmin(np.abs(self.sfh_ages - burst_age))] += 1
   
 
   def constant(self, sfr, pars):
@@ -179,12 +183,18 @@ class star_formation_history:
     # Getting the chosen input age
     age_max = pars["age"] * 1.e9
 
-    # Setting the minimum age as zero
-    age_min = 0.
-
-    # Checking whether the minimum age was set as an input
+    # Setting the minimum age, checking if input else using default value
     if "age_min" in list(pars):
-      age_min = pars["age_min"]
+      age_min = pars["age_min"] * 1.e9
+    else:
+      print("No age set for `age_min`. Using default value of 0 Gyrs.")
+      age_min = 0.
+
+    # Ensure that the minimum age is less than the maximum age
+    if age_min >= age_max:
+      raise ValueError(f"The input value for `age_min` {age_min/1.e9} " +\
+                       "Gyr needs to be less than the input for age " +\
+                       f"{age_max/1.e9} Gyr.")
 
     # Creating a mask to only include ages betwen the max and min
     mask = (self.sfh_ages > age_min) & (self.sfh_ages < age_max)
@@ -202,12 +212,12 @@ class star_formation_history:
     # Getting the chosen input age
     age_max = pars["age"] * 1.e9
 
-    # Setting the tau value as the default value
-    tau = 1.e9
-
-    # Checking whether tau was set as an input
+    # Setting the tau value, checking if input else using default value
     if "tau" in list(pars):
-      tau = pars["tau"]
+      tau = pars["tau"] * 1.e9
+    else:
+      print("No tau value set for delayed SFH. Using default value of 1 Gyrs.")
+      tau = 1.e9
 
     # Calculating the time since star formation started
     time = age_max - self.sfh_ages[self.sfh_ages < age_max]
@@ -241,9 +251,10 @@ class star_formation_history:
       elif self.pars["met_mode"] == "evolving":
         self.evolving_met()
       else:
-        raise ValueError(f"The input metallicity mode of {pars["met_mode"]} " +\
+        raise ValueError(f"The input metallicity mode of {self.pars['met_mode']} " +\
                          "is invalid. Please use either `fixed` or `evolving`.")
     else:
+      print("Input `met_mode` is not including. Using fixed metallicity assumption.")
       self.fixed_met()
   
 
@@ -267,16 +278,13 @@ class star_formation_history:
                        "Please ensure the metallicity is between " +\
                        f"{self.mets[0]} and {self.mets[-1]}.")
     
-    # Setting up a metallicity weights dictionary
-    weights = np.zeros_like(self.mets)
-    
     # Determining the upper grid metallicity points
     up_ind = self.mets[self.mets < self.input_met].shape[0]
 
     # If lowest metallicity is chosen:
     if up_ind == 0:
       # Set all weights in the lowest metallicity bin
-      self.sfh_ceh_grid[0] = self.weights
+      self.sfh_ceh_grid[0] = self.sfr_weights
     else:
       # Split the weighting between the two nearest bins
       
@@ -288,8 +296,8 @@ class star_formation_history:
 
       # Combining metallicity weighting with the SFH weight to determine
       # the overall weighting for each time bin in each SSP model\
-      self.sfh_ceh_grid[up_ind] = self.weights * up_wei
-      self.sfh_ceh_grid[up_ind - 1] = self.weights * (1 - up_wei)
+      self.sfh_ceh_grid[up_ind] = self.sfr_weights * up_wei
+      self.sfh_ceh_grid[up_ind - 1] = self.sfr_weights * (1 - up_wei)
 
 
   def evolving_met(self):
