@@ -144,3 +144,7 @@ dmypy.json
 .artifacts
 .artifacts
 .ruff_cache
+
+# Large BPASS files
+castor_etc/data/bpass_files/bpass_bin-imf135_300_stellar_grids.fits
+castor_etc/data/bpass_files/bpass_sin-imf135_300_stellar_grids.fits
