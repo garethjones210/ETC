@@ -1755,7 +1755,9 @@ class SpectrumMixin:
               dist = self.pars["ldist"]
               # If only value provided, convert to Mpc
               if not isinstance(dist, u.Quantity):
-                self.ldist =  (self.pars["ldist"] * u.Mpc)
+                self.ldist = (self.pars["ldist"] * u.Mpc)
+              else:
+                self.ldist = self.pars["ldist"]
                   
             except:
                 raise ValueError("For a input redshift of 0, the model " +\
@@ -1774,7 +1776,6 @@ class SpectrumMixin:
         ldist_corr = 3.85e33 / (4 * np.pi * ldistcm * ldistcm * (1 + self.redshift))
 
         # Converting from L_sun/A to ergs/s/A/cm^2
-        self.spectrum_old = self.spectrum
         self.spectrum *= ldist_corr
 
         # Redshifting the wavelengths
