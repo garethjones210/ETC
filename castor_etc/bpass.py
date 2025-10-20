@@ -358,7 +358,7 @@ def make_bpass_source(base_source, model_parameters):
       self.uni_age = self.cosmo.age(self.redshift).value
 
       # Luminoisty distance at the given redshift in Mpc
-      self.ldist = self.cosmo.luminosity_distance(self.redshift).value
+      self.ldist = self.cosmo.luminosity_distance(self.redshift)
 
       # Generating the spectrum from the function in the spectrum.py program
       self.gen_bpass_spec()
