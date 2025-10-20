@@ -47,6 +47,11 @@ include = [
 [tool.hatch.build.targets.wheel]
 packages = ["/castor_etc"]
 
+[tool.hatch.build]
+include = ["/castor_etc/data/bpass_files/bpass_bin-imf135_300_stellar_grids.fits",
+            "/castor_etc/data/bpass_files/bpass_sin-imf135_300_stellar_grids.fits",
+            ]
+
 [tool.hatch.envs.build]
 dependencies = [
     "isort"
