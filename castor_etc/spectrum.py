@@ -1747,8 +1747,40 @@ class SpectrumMixin:
 
         # Nebular
 
-        # Redshift to capture observed galaxy
+        # Applying luminoisty distance correction
+        # If the redshift is set as zero, then a luminoisty distance needs
+        # to be provided
+        if self.redshift == 0.:
+            try:
+              dist = self.pars["ldist"]
+              # If only value provided, convert to Mpc
+              if not isinstance(dist, u.Quantity):
+                self.ldist =  (self.pars["ldist"] * u.Mpc)
+                  
+            except:
+                raise ValueError("For a input redshift of 0, the model " +\
+                                 "parameter dictionary needs `ldist` " +\
+                                 "to be a defined key in units of Mpc.")
+        
+        # Converting the distance from Mpc to cm
+        ldistcm = self.ldist.to(u.cm).value
+        
+        # Calculating and applying the luminosity distance correction.
+        # The `3.85x10^33` if the conversion from solar bolometric luminoisty
+        # to ergs s^-1.
+        # The (1+z) factor if the cosmological redshift correction between
+        # observed and rest-frame quantities, specifically on the denominator
+        # since the correction is for flux densities per unit wavelength
+        ldist_corr = 3.85e33 / (4 * np.pi * ldistcm * ldistcm * (1 + self.redshift))
 
+        # Converting from L_sun/A to ergs/s/A/cm^2
+        self.spectrum_old = self.spectrum
+        self.spectrum *= ldist_corr
+
+        # Redshifting the wavelengths
+        self.wavelengths *= (1. + self.redshift)
+
+        # TODO Maybe apply a mask to cut wavelength range down
 
 
     def _calc_xy(self):
