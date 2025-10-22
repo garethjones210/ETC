@@ -1786,8 +1786,8 @@ class SpectrumMixin:
         ###---------------------------###
 
         # Getting the Galactic extinction value if included as an input
-        if "galactic_extinction" in list(self.pars):
-            gal_av = self.pars["galactic_extinction"]
+        if "galactic_Av" in list(self.pars):
+            gal_av = self.pars["galactic_Av"]
         else:
             gal_av = 0.093
 
