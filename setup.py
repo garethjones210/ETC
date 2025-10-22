@@ -142,6 +142,7 @@ setup(
         "emcee",
         "corner",
         "spectres",
+        "extinction",
     ],  # Packages listed after the 'pytransit' package and before the 'spectres' package are pre-requisites to run the 'pytransit' package.
     license="GPLv3",
     python_requires=">=3.9",
