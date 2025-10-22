@@ -97,6 +97,8 @@ from astropy.wcs import WCS
 from astroquery.gaia import Gaia
 from scipy.integrate import simpson
 from scipy.interpolate import interp1d
+from extinction import fitzpatrick99 as fp99
+from extinction import apply
 
 from . import constants as const
 from .conversions import calc_photon_energy, flam_to_AB_mag, fnu_to_flam, mag_to_flux
@@ -1783,7 +1785,19 @@ class SpectrumMixin:
         ### MILKY WAY DUST EXTINCTION ###
         ###---------------------------###
 
-        # TODO Galactic extinction
+        # Getting the Galactic extinction value if included as an input
+        if "galactic_extinction" in list(self.pars):
+            gal_av = self.pars["galactic_extinction"]
+        else:
+            gal_av = 0.093
+
+        # Apply Galactic dust extinction correction
+        # As given by the Schlegel, Finkbeiner and Davis (1998) maps and the
+        # recalibration by Schlafly and Finkbeiner (2011), the typical E(B-V)
+        # extinction values for high-latiude (i.e. excluding the Galactic
+        # plan) extragalactic observations is 0.02-0.04 mags, so using this
+        # and that Rv=3.1 for the Milky Way, apply Av=0.093 for the average.
+        self.spectrum = apply(fp99(self.wavelengths, gal_av), self.spectrum)
 
         ### APPLYING REDSHIFT CORRECTIONS ###
         ###-------------------------------###
