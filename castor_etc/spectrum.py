@@ -1671,7 +1671,8 @@ class SpectrumMixin:
         the BPASS models (single or binary, can be selected), and applies a star-fromation
         history, dust attenuation, IGM attenuation and nebular attenuation and emission.
         """
-        # Check inputs
+        ### CHECKING FOR CURRENT SPECTRUM ###
+        ###-------------------------------###
 
         # Checking whether there is a current spectrum and if the input parameters include
         # overwriting the current spectrum
@@ -1682,6 +1683,9 @@ class SpectrumMixin:
         if "quiet" in list(self.pars):
             quiet = self.pars["quiet"]
         self._check_existing_spectrum(overwrite, quiet=quiet)
+
+        ### CHECKING INPUTS ###
+        ###-----------------###
 
         # Checking that the age is included and not larger than the age of the Universe
         try:
@@ -1705,6 +1709,9 @@ class SpectrumMixin:
 
         # TODO - Add functionaility to ensure that the file selected is included in the data directory
         
+        ### OPENING FILES AND COLLECTING VALUES ###
+        ###-------------------------------------###
+
         # Metallicities of the BPASS stellar models
         self.mets = np.array([1.e-5, 1.e-4, 0.001, 0.002, 0.003, 0.004,
                          0.006, 0.008, 0.010, 0.014, 0.020, 0.030, 0.040])
@@ -1723,6 +1730,9 @@ class SpectrumMixin:
         # Extracting the data arrays
         ssp_grid = np.array([hdu.data.T for hdu in ssp_hdus])
 
+        ### STAR FORMATION HISTORY AND CHEMICAL EVOLUTION HISTORY PROFILES ###
+        ###----------------------------------------------------------------###
+
         # Generating the star formation history profile and calculating 
         # the star formation rate for each SSP model age
         self.make_sfh_profile()
@@ -1731,6 +1741,9 @@ class SpectrumMixin:
         # for each metallicity SSP grid, using either a fixed or evolving
         # metallicity input
         self.make_ceh_profile()
+
+        ### CALCULATING EMISSION SPECTRUM ###
+        ###-------------------------------###
 
         # Using the SFH and CEH weightings to combine the SSP models into
         # a single CSP model
@@ -1741,11 +1754,39 @@ class SpectrumMixin:
             if self.sfh_ceh_grid[i].sum() > 0.:
                 self.spectrum += np.sum(ssp_model * self.sfh_ceh_grid[i], axis=1)
 
-        # IGM attenuation
+        ### NEBULAR ATTENUATION ###
+        ###---------------------###
 
-        # Dust attenuation
+        # TODO Nebular
 
-        # Nebular
+        ### DUST ATTENUATION ###
+        ###------------------###
+
+        # Calculating the value A_lambda/Av for the choosen dust attenuation model
+        self.make_dust_attenuation()
+
+        # Collecting the total extinction in the V band in magnitudes from input
+        try:
+            Av = self.pars["dust_Av"]
+        except:
+            raise ValueError("The model parameters dictionary needs " +\
+                               "`dust_Av` to be a definied key.")
+        
+        # Applying dust attenuation to the spectrum
+        self.spectrum *= 10**(-0.4 * Av * self.Alam)
+
+        ### INTERGALACTIC MEDIUM ATTENUATION ###
+        ###----------------------------------###
+
+        # TODO IGM attenuation
+
+        ### MILKY WAY DUST EXTINCTION ###
+        ###---------------------------###
+
+        # TODO Galactic extinction
+
+        ### APPLYING REDSHIFT CORRECTIONS ###
+        ###-------------------------------###
 
         # Applying luminoisty distance correction
         # If the redshift is set as zero, then a luminoisty distance needs
@@ -1781,7 +1822,10 @@ class SpectrumMixin:
         # Redshifting the wavelengths
         self.wavelengths *= (1. + self.redshift)
 
-        # TODO Maybe apply a mask to cut wavelength range down
+        # Adding unit label for wavelength
+        self.wavelengths *= u.AA
+
+        # TODO Apply a mask to cut wavelength range down
 
 
     def _calc_xy(self):
