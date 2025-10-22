@@ -348,7 +348,7 @@ class spec_attenuation:
                        f"following dust attenuation models: {dust_dir}")
     
     # Calling function to generated chosen dust attenuation law
-    getattr(self, dust_model)
+    getattr(self, dust_model)()
 
 
   def calzetti(self):
@@ -374,8 +374,8 @@ class spec_attenuation:
 
     # Calculating the extinction law in the lowest regime
     klam[mask1] = ((wave1/0.12)**-0.77 * (4.05 
-                        + 2.659 * (-2.156 + 1.509/0.12 
-                                   - 0.198/0.12 + 0.011/0.12)))
+                        + 2.659 * (-2.156 + 1.509/0.12 -
+                                   0.198/0.12**2 + 0.011/0.12**3)))
 
     # Calculating the extinction law in the middle regime
     klam[mask2] = (4.05 + 2.659 * (-2.156 + 1.509/wave2
@@ -543,7 +543,7 @@ def make_bpass_source(base_source, model_parameters):
       Dictionary containing the model parameters to generate a BPASS spectrum.
       Keys are strings and values are floats.
   """
-  class BPASSSource(base_source, star_formation_history):
+  class BPASSSource(base_source, star_formation_history, spec_attenuation):
     """
     TODO
     """

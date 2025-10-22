@@ -1823,7 +1823,7 @@ class SpectrumMixin:
         self.wavelengths *= (1. + self.redshift)
 
         # Adding unit label for wavelength
-        self.wavelengths *= u.AA
+        # self.wavelengths = fits.open(filepath)[-1].data * u.AA TODO fix later
 
         # TODO Apply a mask to cut wavelength range down
 
