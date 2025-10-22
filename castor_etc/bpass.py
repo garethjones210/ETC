@@ -66,7 +66,7 @@ BPASS
 It inherits one of the classes from the `castor_etc.sources`, and then calculates its own
 spectrum using the BPASS models.
 
-This includes two function
+This includes two function TODO
   - gen_bpass_spec
   - make_bpass_source
   - BPASS_spec
@@ -118,7 +118,7 @@ class star_formation_history:
       sfh_model = self.pars["sfh_model"]
     except:
       raise ValueError("The model parameters dictionary needs " +\
-                         "`metallicity` to be a definied key.")
+                         "`sfh_model` to be a definied key.")
 
     # Permitted SFH models
     sfh_dir = np.array(["burst", "constant", "delayed", "custom"])
@@ -126,7 +126,7 @@ class star_formation_history:
     # Checking that the chosen SFH is valid
     if not sfh_model in sfh_dir:
       raise ValueError(f"The chosen SFH model of {sfh_model} is " +\
-                       "not permitted. Please chosen one of the " +\
+                       "not permitted. Please choose one of the " +\
                        f"following SFH models: {sfh_dir}")
     
     # Calling function to generated chosen SFH profile
@@ -295,7 +295,7 @@ class star_formation_history:
       up_wei = (self.input_met - self.mets[up_ind - 1])/met_width
 
       # Combining metallicity weighting with the SFH weight to determine
-      # the overall weighting for each time bin in each SSP model\
+      # the overall weighting for each time bin in each SSP model
       self.sfh_ceh_grid[up_ind] = self.sfr_weights * up_wei
       self.sfh_ceh_grid[up_ind - 1] = self.sfr_weights * (1 - up_wei)
 
@@ -306,6 +306,225 @@ class star_formation_history:
     """
     # Will write code here later
     raise ValueError("Need to sort later, check in again soon!")
+  
+
+class spec_attenuation:
+  """
+  Class to hold all the attenuation functions required to modify the spectra.
+  To be used with the BPASSSource class. This includes dust attenuation, nebular
+  attenuation, and intergalactic medium attenuation and their associated
+  functions (i.e. different dust attenuation models).
+  """
+  def make_dust_attenuation(self):
+    """
+    Function use to calculate the dust attenuation. The function calls the desired
+    attenuation/extinction law based on the choosen model provided in the model
+    parameter input dictionary.
+
+    The dust attenuation/extinction law, k(lambda) where lambda is the wavelength,
+    is defined in separate functions for different laws (i.e. types of dust or
+    environments). These are calculated and then coverted to A_lambda/Av, where
+    A_lambda is the extinction as a function of wavelength and Av is the total 
+    extinction in the V band in magnitudes, by dividing by Rv, the total-to-selective
+    extinction ratio (describes shape of extinction curve). This allows for the
+    dust attenuation to be calculated as 10**(-0.4 * A_lambda * Av).
+
+    TODO Add other dust attenuation laws
+    """
+    # Getting the inputted dust attenuation model chosen
+    try:
+      dust_model = self.pars["dust_model"]
+    except:
+      raise ValueError("The model parameters dictionary needs " +\
+                         "`dust_model` to be a definied key.")
+
+    # Permitted dust attenuation models
+    dust_dir = np.array(["calzetti", "salim_sf", "salim_qui", "salim_custom"])
+
+    # Checking that the chosen SFH is valid
+    if not dust_model in dust_dir:
+      raise ValueError(f"The chosen dust attenuation model of {dust_model} " +\
+                       "is not permitted. Please choose one of the " +\
+                       f"following dust attenuation models: {dust_dir}")
+    
+    # Calling function to generated chosen dust attenuation law
+    getattr(self, dust_model)
+
+
+  def calzetti(self):
+    """
+    Dust extinction law of Calzetti et al. (2000). The Rv value is set
+    as 4.05 as defined in the publication.
+    """
+    # Converting the wavelength to microns
+    mu_wave = self.wavelengths * 1.e-4
+
+    # Creating masks for each regime of the law
+    mask1 = (mu_wave < 0.12)
+    mask2 = (mu_wave >= 0.12) & (mu_wave < 0.63)
+    mask3 = (mu_wave >= 0.63) & (mu_wave <= 2.20)
+
+    # Creating masked wavelength regimes
+    wave1 = mu_wave[mask1]
+    wave2 = mu_wave[mask2]
+    wave3 = mu_wave[mask3]
+
+    # Creating storage array for klam
+    klam = np.zeros_like(mu_wave)
+
+    # Calculating the extinction law in the lowest regime
+    klam[mask1] = ((wave1/0.12)**-0.77 * (4.05 
+                        + 2.659 * (-2.156 + 1.509/0.12 
+                                   - 0.198/0.12 + 0.011/0.12)))
+
+    # Calculating the extinction law in the middle regime
+    klam[mask2] = (4.05 + 2.659 * (-2.156 + 1.509/wave2
+                                - 0.198/wave2**2 + 0.011/wave2**3))
+    
+    # Calculating the extinction law in the highest regime
+    klam[mask3] = 4.05 + 2.659 * (-1.857 + 1.040/wave3)
+
+    # Converting from klam to Alam by dividing by Rv
+    self.Alam = klam/4.05
+
+
+  def salim_sf(self):
+    """
+    Dust attenuation law model parameters for Salim et al. (2018) for
+    the average curve of all star-forming galaxies, as given in Table 1.
+    """
+    # Extinction law parameter values
+    B, a0, a1, a2, a3, Rv = 1.57, -4.30, 2.71, -0.191, 0.0121, 3.15
+
+    # Passing parameter values to extinction law function
+    self._salim_law(B, a0, a1, a2, a3, Rv)
+
+
+  def salim_qui(self):
+    """
+    Dust attenuation law model parameters for Salim et al. (2018) for
+    the average curve of all quiescent galaxies, as given in Table 1.
+    """
+    # Extinction law parameter values
+    B, a0, a1, a2, a3, Rv = 2.21, -3.72, 2.20, -0.062, 0.0080, 2.61
+
+    # Passing parameter values to extinction law function
+    self._salim_law(B, a0, a1, a2, a3, Rv)
+
+
+  def salim_custom(self):
+    """
+    Dust attenuation law model parameters for Salim et al. (2018).
+    This allows for a custom set of model parameters to be provided
+    for the law via the model parameter input dictionary.
+    """
+    # Unpacking extinction law parameter values from input dictionary
+    # B
+    try:
+      B = self.pars['salim_B']
+    except:
+      raise ValueError("To use the custom Salim et al. (2018) law " +\
+                        "the model parameters dictionary needs " +\
+                         "`salim_B` to be a definied key.")
+    
+    # a0
+    try:
+      a0 = self.pars['salim_a0']
+    except:
+      raise ValueError("To use the custom Salim et al. (2018) law " +\
+                        "the model parameters dictionary needs " +\
+                         "`salim_a0` to be a definied key.")
+    
+    # a1
+    try:
+      a1 = self.pars['salim_a1']
+    except:
+      raise ValueError("To use the custom Salim et al. (2018) law " +\
+                        "the model parameters dictionary needs " +\
+                         "`salim_a1` to be a definied key.")
+    
+    # a2
+    try:
+      a2 = self.pars['salim_a2']
+    except:
+      raise ValueError("To use the custom Salim et al. (2018) law " +\
+                        "the model parameters dictionary needs " +\
+                         "`salim_a2` to be a definied key.")
+    
+    # a3
+    try:
+      a3 = self.pars['salim_a3']
+    except:
+      raise ValueError("To use the custom Salim et al. (2018) law " +\
+                        "the model parameters dictionary needs " +\
+                         "`salim_a3` to be a definied key.")
+    
+    # Rv
+    try:
+      Rv = self.pars['salim_Rv']
+    except:
+      raise ValueError("To use the custom Salim et al. (2018) law " +\
+                        "the model parameters dictionary needs " +\
+                         "`salim_Rv` to be a definied key.")
+    
+    # Passing parameter values to extinction law function
+    self._salim_law(B, a0, a1, a2, a3, Rv)
+  
+
+  def _salim_law(self, B, a0, a1, a2, a3, Rv):
+    """
+    Dust attenuation law of Salim et al. (2018), as given by Equation 8.
+    The drude profile is given in Equation 9. Functional fits for the
+    model and derived parameter values are given in Table 1, which are
+    passed to this function as arugments. There are defined functions
+    above for the overall star-forming and quiescent functional fits,
+    and a function to input custome values for the attenuation law.
+
+    Parameters
+    ----------
+      B :: float
+        The amplitude of the ultraviolet bump.
+
+      a0 :: float
+        The zeroth order coefficient of the polynomial fit to the total
+        attenuation curve.
+      
+      a1 :: float
+        The first order coefficient of the polynomial fit to the total
+        attenuation curve.
+      
+      a2 :: float
+        The second order coefficient of the polynomial fit to the total
+        attenuation curve.
+      
+      a3 :: float
+        The third order coefficient of the polynomial fit to the total
+        attenuation curve.
+      
+      Rv :: float
+        The total-to-selective extinction ratio which describes the shape 
+        of the attenuation curve.
+    """
+    # Converting the wavelength to microns
+    mu_wave = self.wavelengths * 1.e-4
+
+    # Calculating the Drude profile
+    drude = (B * (mu_wave**2) * (0.035**2))
+    drude /= (((mu_wave**2) - (0.2175**2))**2 + (mu_wave**2) * (0.035**2))
+
+    # Creating a storage array for klam
+    klam = np.zeros_like(mu_wave)
+    
+    # Calculating the extinction profile
+    klam = a0 + a1/mu_wave + a2/(mu_wave**2) + a3/(mu_wave**3) + drude + Rv
+
+    # Fit produces negative values above a certain regime (lambda_max), so
+    # set all negative values to zero
+    klam[klam < 0.] = 0.
+
+    # Converting from klam to Alam by dividing by Rv
+    self.Alam = klam/Rv
+
 
 
 def make_bpass_source(base_source, model_parameters):
