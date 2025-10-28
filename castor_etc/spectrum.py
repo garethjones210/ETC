@@ -1780,7 +1780,11 @@ class SpectrumMixin:
         ### INTERGALACTIC MEDIUM ATTENUATION ###
         ###----------------------------------###
 
-        # TODO IGM attenuation
+        # Calculating the tranmission function at the redshift of the object
+        tau = self.calc_igm_trans(self.redshift, self.wavelengths)
+
+        # Applying IGM attenuation to the spectrum
+        self.spectrum *= np.exp(-tau)
 
         ### MILKY WAY DUST EXTINCTION ###
         ###---------------------------###
