@@ -75,12 +75,14 @@ This includes two function TODO
 import os
 import warnings
 from numbers import Number
+from os.path import join
 
 import astropy.units as u
 from astropy.cosmology import FlatLambdaCDM
 import numpy as np
 
 from .sources import Profiles, PointSource, ExtendedSource, GalaxySource
+from .filepaths import DATAPATH
 
 
 class star_formation_history:
@@ -525,6 +527,183 @@ class spec_attenuation:
     # Converting from klam to Alam by dividing by Rv
     self.Alam = klam/Rv
 
+
+  def calc_igm_trans(self, z, wavs):
+    """
+    Calculates the intergalactic medium transmission function following the
+    analytic funtions provided in Inoue et al. (2014). The mean optical
+    depth of the IGM, tau_IGM, is calculated as
+
+    tau_IGM = tau_LAF_LS + tau_DLA_LS + tau_LAF_LC + tau_DLA_LC,
+
+    where tau_i_j are the optical depths for the Lyman-alpha forest (LAF)
+    and damped Lyman-alpha system (DLA) components for the Lyman series
+    (LS) and Lyman continuum (LC).
+
+    Parameters
+    ----------
+      z :: float
+        Redshift of the source to calculate the transmission function for
+
+      wavs :: array
+        The rest-frame wavelengths of the model at which to calculate the
+        transmission function for
+    """
+    # File containing the wavelengths and coefficients for Lyman-series
+    # absorption as given in Table 2 of Inoue et al. (2018).
+    filepath = join(DATAPATH, "bpass_files", "lyman_series_coefs_inoue_2014_table2.txt")
+
+    # Opening file for Lyman-series absorption coefficients
+    LS_tab = np.loadtxt(filepath)
+
+    # Lyman-limit wavelength of 911.8 Angstroms
+    lamL = 911.8
+      
+    # Observed wavelengths once redshifted by input redshift value
+    ob_wavs = wavs * (1. + z)
+
+    # Creating an array of the observed wavelength divided by the 
+    # Lyman-limit wavelength
+    ld_wavs = ob_wavs/lamL
+
+    # Storage values for the different optical depth components
+    LAF_LS = np.zeros_like(wavs)
+    DLA_LS = np.zeros_like(wavs)
+    LAF_LC = np.zeros_like(wavs)
+    DLA_LC = np.zeros_like(wavs)
+
+    # Looping over the Inoue et al. (2018) table wavlengths
+    for j in range(39):
+
+    ### Calculating the LS optical depth for the LAF component ###
+
+      # For the regime where the target object is at z<1.2
+      if z < 1.2:
+        # Creating wavelength masks
+        mask1 = (ob_wavs > LS_tab[j,1]) & (ob_wavs < LS_tab[j,1] * (1. + z))
+
+        # Calculating optical depth
+        LAF_LS[mask1] += LS_tab[j,2] * (ob_wavs[mask1]/LS_tab[j,1])**1.2
+      
+      # For the regime where the target object is at 1.2<=z<4.7
+      elif z < 4.7:
+        # Creating wavelength masks
+        mask1 = (ob_wavs > LS_tab[j,1]) & (ob_wavs < 2.2 * LS_tab[j,1])
+        mask2 = (ob_wavs >= 2.2 * LS_tab[j,1]) & (ob_wavs < LS_tab[j,1] * (1. + z))
+
+        # Calculating optical depth
+        LAF_LS[mask1] += LS_tab[j,2] * (ob_wavs[mask1]/LS_tab[j,1])**1.2
+        LAF_LS[mask2] += LS_tab[j,3] * (ob_wavs[mask2]/LS_tab[j,1])**3.7
+
+      # For the regime where the target object is at z>=4.7
+      else:
+        # Creating wavelength masks
+        mask1 = (ob_wavs > LS_tab[j,1]) & (ob_wavs < 2.2 * LS_tab[j,1])
+        mask2 = (ob_wavs >= 2.2 * LS_tab[j,1]) & (ob_wavs < 5.7 * LS_tab[j,1])
+        mask3 = (ob_wavs >= 5.7 * LS_tab[j,1]) & (ob_wavs < LS_tab[j,1] * (1. + z))
+
+        # Calculating optical depth
+        LAF_LS[mask1] += LS_tab[j,2] * (ob_wavs[mask1]/LS_tab[j,1])**1.2
+        LAF_LS[mask2] += LS_tab[j,3] * (ob_wavs[mask2]/LS_tab[j,1])**3.7
+        LAF_LS[mask3] += LS_tab[j,4] * (ob_wavs[mask3]/LS_tab[j,1])**5.5
+
+    ### Calcualting the LS optical depth for the DLA component ###
+
+      # For the regime where the target object is at z<2.0
+      if z < 2.0:
+        # Creating wavelength masks
+        mask1 = (ob_wavs > LS_tab[j,1]) & (ob_wavs < LS_tab[j,1] * (1. + z))
+
+        # Calculating optical depth
+        DLA_LS[mask1] += LS_tab[j,5] * (ob_wavs[mask1]/LS_tab[j,1])**2.0
+
+      # For the regime where the taget object is at z>=2.0
+      else:
+        # Creating wavelength masks
+        mask1 = (ob_wavs > LS_tab[j,1]) & (ob_wavs < 3.0 * LS_tab[j,1])
+        mask2 = (ob_wavs >= 3.0 * LS_tab[j,1]) & (ob_wavs < LS_tab[j,1] * (1. + z))
+
+        # Calculating optical depth
+        DLA_LS[mask1] += LS_tab[j,5] * (ob_wavs[mask1]/LS_tab[j,1])**2.0
+        DLA_LS[mask2] += LS_tab[j,6] * (ob_wavs[mask1]/LS_tab[j,1])**3.0
+
+    ### Calculating the LC optical depth for the LAF component ###
+
+    # For the regime where the target object is at z<1.2
+    if z < 1.2:
+      # Creating wavelength masks
+      mask1 = (ob_wavs > lamL) & (ob_wavs < lamL * (1. + z))
+
+      # Calculating optical depth
+      LAF_LC[mask1] = (0.325 * (ld_wavs[mask1]**1.2 
+                        - (1. + z)**-0.9 * ld_wavs[mask1]**2.1))
+      
+    # For the regime where the target object is at 1.2<=z<4.7
+    elif z < 4.7:
+      # Creating wavelength masks
+      mask1 = (ob_wavs > lamL) & (ob_wavs < 2.2 * lamL)
+      mask2 = (ob_wavs >= 2.2 * lamL) & (ob_wavs < lamL * (1. + z))
+
+      # Calculating optical depth
+      LAF_LC[mask1] = (2.55e-2 * (1. + z)**1.6 * ld_wavs[mask1]**2.1
+                        + 0.325 * ld_wavs[mask1]**1.2
+                          - 0.250 * ld_wavs[mask1]**2.1)
+      
+      LAF_LC[mask2] = (2.55e-2 * ((1. + z)**1.6 * ld_wavs[mask2]**2.1
+                                  - ld_wavs[mask2]**3.7))
+    
+    # For the regime where the target object is at z>=4.7
+    else:
+      # Creating wavelength masks
+      mask1 = (ob_wavs > lamL) & (ob_wavs < 2.2 * lamL)
+      mask2 = (ob_wavs >= 2.2 * lamL) & (ob_wavs < 5.7 * lamL)
+      mask3 = (ob_wavs >= 5.7 * lamL) & (ob_wavs < lamL * (1. + z))
+
+      # Calculating optical depth
+      LAF_LC[mask1] = (5.22e-4 * (1. + z)**3.4 * ld_wavs[mask1]**2.1
+                        + 0.325 * ld_wavs[mask1]**1.2
+                          - 3.14e-2 * ld_wavs[mask1]**2.1)
+      
+      LAF_LC[mask2] = (5.22e-4 * (1. + z)**3.4 * ld_wavs[mask2]**2.1
+                        + 0.218 * ld_wavs[mask2]**2.1
+                          - 2.55e-2 * ld_wavs[mask2]**3.7)
+      
+      LAF_LC[mask3] = (5.22e-4 * ((1. + z)**3.4 * ld_wavs[mask3]**2.1
+                                  - ld_wavs**5.5))
+
+    ### Calculating the LC optical depth for the DLA component ###
+
+    # For the regime where the target object is at z<2.0
+    if z < 2.0:
+      # Creating wavelength masks
+      mask1 = (ob_wavs > lamL) & (ob_wavs < lamL * (1. + z))
+
+      # Calculating optical depth
+      DLA_LC[mask1] = (0.211 * (1. + z)**2.0
+                        - 7.66e-2 * (1. + z)**2.3 * ld_wavs[mask1]**-0.3
+                          - 0.135 * ld_wavs[mask1]**2.0)
+      
+    # For the regime where the target object is at z>=2.0
+    else:
+      # Creating wavelength masks
+      mask1 = (ob_wavs > lamL) & (ob_wavs < 3.0 * lamL)
+      mask2 = (ob_wavs >= 3.0 * lamL) & (ob_wavs < lamL * (1. + z))
+
+      # Calculating optical depth
+      DLA_LC[mask1] = (0.634 + 4.70e-2 * (1. + z)**3.0
+                        - 1.78e-2 * (1. + z)**3.3 * ld_wavs[mask1]**-0.3
+                          - 0.135 * ld_wavs[mask1]**2.0 
+                            - 0.291 * ld_wavs[mask1]**-0.3)
+      
+      DLA_LC[mask2] = (4.70e-2 * (1. + z)**3.0
+                        - 1.78e-2 * (1. + z)**3.3 * ld_wavs[mask2]**-0.3
+                          - 2.92e-2 * ld_wavs[mask2**3.0])
+
+    # Combining all individual component optical depths to get the
+    # total IGM optical depth
+    tau = LAF_LS + DLA_LS + LAF_LC + DLA_LC
+
+    return tau
 
 
 def make_bpass_source(base_source, model_parameters):
