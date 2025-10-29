@@ -625,7 +625,7 @@ class spec_attenuation:
 
         # Calculating optical depth
         DLA_LS[mask1] += LS_tab[j,5] * (ob_wavs[mask1]/LS_tab[j,1])**2.0
-        DLA_LS[mask2] += LS_tab[j,6] * (ob_wavs[mask1]/LS_tab[j,1])**3.0
+        DLA_LS[mask2] += LS_tab[j,6] * (ob_wavs[mask2]/LS_tab[j,1])**3.0
 
     ### Calculating the LC optical depth for the LAF component ###
 
@@ -669,7 +669,7 @@ class spec_attenuation:
                           - 2.55e-2 * ld_wavs[mask2]**3.7)
       
       LAF_LC[mask3] = (5.22e-4 * ((1. + z)**3.4 * ld_wavs[mask3]**2.1
-                                  - ld_wavs**5.5))
+                                  - ld_wavs[mask3]**5.5))
 
     ### Calculating the LC optical depth for the DLA component ###
 
@@ -697,7 +697,7 @@ class spec_attenuation:
       
       DLA_LC[mask2] = (4.70e-2 * (1. + z)**3.0
                         - 1.78e-2 * (1. + z)**3.3 * ld_wavs[mask2]**-0.3
-                          - 2.92e-2 * ld_wavs[mask2**3.0])
+                          - 2.92e-2 * ld_wavs[mask2]**3.0)
 
     # Combining all individual component optical depths to get the
     # total IGM optical depth
