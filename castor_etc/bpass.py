@@ -802,7 +802,7 @@ def BPASS_spec(base_source, model_parameters, *args, **kwargs):
   return bpass_class(*args, **kwargs)
 
 
-def make_bpass_stellar_files(filepath, name_comp=None):
+def make_bpass_stellar_files(filepath, name_comp={}):
   """
   Makes the BPASS fit file required to run the BPASS spectrum generation
   code in FORECASTOR, storing the generated fit file in the directory
@@ -819,8 +819,8 @@ def make_bpass_stellar_files(filepath, name_comp=None):
       Dictionary containing the file name component parts (i.e. IMF variant)
   """
   # Metallicity value names used in the BPASS file names
-  met_nams = ["em5", "em4", "001", "002", "003", "004",
-              "006", "008", "010", "014", "020", "030", "040"]
+  met_nams = ["zem5", "zem4", "z001", "z002", "z003", "z004",
+              "z006", "z008", "z010", "z014", "z020", "z030", "z040"]
   
   # The stellar evolution type, binary or single (bin or sin)
   if "evo_type" in list(name_comp):
@@ -830,7 +830,7 @@ def make_bpass_stellar_files(filepath, name_comp=None):
 
   # The IMF variant
   if "imf_var" in list(name_comp):
-    imf_nam = name_comp["imf_type"]
+    imf_nam = name_comp["imf_var"]
   else:
     imf_nam = "imf135_300"
   
@@ -849,22 +849,25 @@ def make_bpass_stellar_files(filepath, name_comp=None):
     alpha_val = None
 
   # Creating the base name for each file, which will start with `spectra`
-  base = filepath + "spectra-" + evo_nam + "-" + imf_nam + "."
+  base_nam = "spectra-" + evo_nam + "-" + imf_nam + "."
 
   # The name for saving the file
-  sav_nam = DATAPATH + "bpass_" + evo_nam + "-" + imf_nam
+  sav_pri = "bpass_" + evo_nam + "-" + imf_nam
 
   # Modifying base name and save file name if using BPASS v2.3.1
   if stel_lib != None:
-    base = base + stel_lib + "."
-    sav_nam = sav_nam + "_" + stel_lib + "-" + alpha_val
+    base_nam = base_nam + stel_lib + "."
+    sav_pri = sav_pri + "_" + stel_lib + "_" + alpha_val
     # Modifying the metallicity names to include the alpha enhancement
     met_nams = [x + '.' + alpha_val for x in met_nams]
 
   # Modifying base name and save file name if using BPASS v2.3
   elif alpha_val != None:
-    base = base + alpha_val + "."
-    sav_nam = sav_nam + "_" + alpha_val
+    base_nam = base_nam + alpha_val + "."
+    sav_pri = sav_pri + "_" + alpha_val
+  
+  # Joining base file name with path to directory
+  base = join(filepath, base_nam)
   
   # Ages at which SSP models are generated in BPASS
   ages = 10**(6 + 0.1*(np.arange(0, 51)))
@@ -880,7 +883,8 @@ def make_bpass_stellar_files(filepath, name_comp=None):
     # Loading in the BPASS SSP models
     # Note: BPASS stores these at 10^6 Solar masses, so the divide by
     # 1.e6 is to convert to units of L_sun/Angstrom/M_sun
-    grid = np.loadtxt(base + met_nams[i] + ".dat", usecols=(1, 52)).T/1.e6
+    grid = np.loadtxt(base + met_nams[i] + ".dat", 
+                       usecols=np.arange(1, 52)).T/1.e6
 
     gridname = "met_" + met_nams[i]
     list_of_hdus.append(fits.ImageHDU(name=gridname, data=grid))
@@ -890,8 +894,10 @@ def make_bpass_stellar_files(filepath, name_comp=None):
   list_of_hdus.append(fits.ImageHDU(name="Wavelength_Angstroms", data=wav))
 
   # Creating and saving the fits file
+  sav_nam = join(DATAPATH, "bpass_files", sav_pri)
   hdulist = fits.HDUList(hdus=list_of_hdus)
   hdulist.writeto(sav_nam + "_stellar_grids.fits", overwrite=True)
 
   # Printing the file has been saved along with its name
-  print(f"File {sav_nam + "_stellar_grids.fits"} has been saved.")
+  print(f"File {sav_pri + '_stellar_grids.fits'} has been saved " +
+         f"in directory {join(DATAPATH, 'bpass_files')}")
