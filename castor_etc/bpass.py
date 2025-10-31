@@ -81,7 +81,7 @@ from numbers import Number
 from os.path import join
 
 import astropy.units as u
-from astropy.cosmology import FlatLambdaCDM
+from astropy.cosmology import Planck18
 from astropy.io import fits
 import numpy as np
 
@@ -754,7 +754,7 @@ def make_bpass_source(base_source, model_parameters):
 
       # Initialising the cosmology of the Universe, which will be used for
       # calculating the age of the Universe and distance luminoisty
-      self.cosmo = FlatLambdaCDM(H0=70, Tcmb0=2.725, Om0=0.3)
+      self.cosmo = Planck18
 
       # Age of the Universe at the given redshift in Gyr
       self.uni_age = self.cosmo.age(self.redshift).value
