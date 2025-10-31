@@ -64,12 +64,15 @@ BPASS
 
 `castor_etc.bpass` provides the methods to incorporate the BPASS models into the calculator.
 It inherits one of the classes from the `castor_etc.sources`, and then calculates its own
-spectrum using the BPASS models.
+spectrum using the BPASS models. There are also classes to hold the functions required to
+calculate stellar histories and attenuations for modification to the BPASS spectra.
 
-This includes two function TODO
-  - gen_bpass_spec
+This includes the following classes and functions:
+  - star_formation_history
+  - spec_attenuation
   - make_bpass_source
   - BPASS_spec
+  - make_bpass_stellar_files
 """
 
 import os
@@ -79,6 +82,7 @@ from os.path import join
 
 import astropy.units as u
 from astropy.cosmology import FlatLambdaCDM
+from astropy.io import fits
 import numpy as np
 
 from .sources import Profiles, PointSource, ExtendedSource, GalaxySource
@@ -138,7 +142,7 @@ class star_formation_history:
     mass_norm = np.sum(self.sfr * self.time_widths)
 
     # Setting the total mass as 1 Solar mass
-    mass = 1. #TODO Could change this to a notification if mass is not set
+    mass = 1. #TODO Could change this to a notification if mass is not set or make compulsory
 
     # Checking whether the mass was inputted in the dictionary
     if "mass" in list(self.pars):
@@ -796,3 +800,98 @@ def BPASS_spec(base_source, model_parameters, *args, **kwargs):
 
   # Initialising the inherited class and returning the result
   return bpass_class(*args, **kwargs)
+
+
+def make_bpass_stellar_files(filepath, name_comp=None):
+  """
+  Makes the BPASS fit file required to run the BPASS spectrum generation
+  code in FORECASTOR, storing the generated fit file in the directory
+  `/castor_etc/data/bpass_files/`. The BPASS files need to be downloaded
+  from the BPASS website and stored in a directory, which is passed as
+  an argument to this function.
+
+  Parameters
+  ----------
+    filepath :: str
+      Path to the directory where the BPASS files are stored
+
+    name_comp :: dict
+      Dictionary containing the file name component parts (i.e. IMF variant)
+  """
+  # Metallicity value names used in the BPASS file names
+  met_nams = ["em5", "em4", "001", "002", "003", "004",
+              "006", "008", "010", "014", "020", "030", "040"]
+  
+  # The stellar evolution type, binary or single (bin or sin)
+  if "evo_type" in list(name_comp):
+    evo_nam = name_comp["evo_type"]
+  else:
+    evo_nam = "bin"
+
+  # The IMF variant
+  if "imf_var" in list(name_comp):
+    imf_nam = name_comp["imf_type"]
+  else:
+    imf_nam = "imf135_300"
+  
+  # The stellar spectral library used
+  # Note: This is only required for v2.3.1 models
+  if "stel_lib" in list(name_comp):
+    stel_lib = name_comp["stel_lib"]
+  else:
+    stel_lib = None
+
+  # The alpha enhancement being used
+  # Note: This is only require for v2.3 models and later
+  if "alpha" in list(name_comp):
+    alpha_val = name_comp["alpha"]
+  else:
+    alpha_val = None
+
+  # Creating the base name for each file, which will start with `spectra`
+  base = filepath + "spectra-" + evo_nam + "-" + imf_nam + "."
+
+  # The name for saving the file
+  sav_nam = DATAPATH + "bpass_" + evo_nam + "-" + imf_nam
+
+  # Modifying base name and save file name if using BPASS v2.3.1
+  if stel_lib != None:
+    base = base + stel_lib + "."
+    sav_nam = sav_nam + "_" + stel_lib + "-" + alpha_val
+    # Modifying the metallicity names to include the alpha enhancement
+    met_nams = [x + '.' + alpha_val for x in met_nams]
+
+  # Modifying base name and save file name if using BPASS v2.3
+  elif alpha_val != None:
+    base = base + alpha_val + "."
+    sav_nam = sav_nam + "_" + alpha_val
+  
+  # Ages at which SSP models are generated in BPASS
+  ages = 10**(6 + 0.1*(np.arange(0, 51)))
+
+  # Wavelength array for the BPASS models
+  wav = np.loadtxt(base + met_nams[0] + ".dat", usecols=0)
+
+  # Creating a storage HDU list for the different grids
+  list_of_hdus = [fits.PrimaryHDU()]
+
+  # Looping over the metallicity files
+  for i in range(len(met_nams)):
+    # Loading in the BPASS SSP models
+    # Note: BPASS stores these at 10^6 Solar masses, so the divide by
+    # 1.e6 is to convert to units of L_sun/Angstrom/M_sun
+    grid = np.loadtxt(base + met_nams[i] + ".dat", usecols=(1, 52)).T/1.e6
+
+    gridname = "met_" + met_nams[i]
+    list_of_hdus.append(fits.ImageHDU(name=gridname, data=grid))
+  
+  # Appending the age and wavelength parameter grids at the end
+  list_of_hdus.append(fits.ImageHDU(name="Stellar_age_yr", data=ages))
+  list_of_hdus.append(fits.ImageHDU(name="Wavelength_Angstroms", data=wav))
+
+  # Creating and saving the fits file
+  hdulist = fits.HDUList(hdus=list_of_hdus)
+  hdulist.writeto(sav_nam + "_stellar_grids.fits", overwrite=True)
+
+  # Printing the file has been saved along with its name
+  print(f"File {sav_nam + "_stellar_grids.fits"} has been saved.")
