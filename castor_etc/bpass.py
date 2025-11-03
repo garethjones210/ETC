@@ -81,10 +81,10 @@ import warnings
 from numbers import Number
 from os.path import join
 
+import numpy as np
 import astropy.units as u
 from astropy.cosmology import Planck18
 from astropy.io import fits
-import numpy as np
 
 from .sources import Profiles, PointSource, ExtendedSource, GalaxySource
 from .filepaths import DATAPATH
@@ -160,12 +160,15 @@ class star_formation_history:
     # Getting the mass normalisation
     mass_norm = np.sum(self.sfr * time_widths)
 
-    # Setting the total mass as 1 Solar mass
-    mass = 1. #TODO Could change this to a notification if mass is not set or make compulsory
-
     # Checking whether the mass was inputted in the dictionary
     if "mass" in list(self.pars):
       mass = self.pars["mass"]
+    else:
+      # Default value for the mass is 1 Solar_mass
+      mass = 1.
+      # Notifying that the user has not set `mass` and the default
+      # value is being used
+      print("No value set for the `mass`. Using default value of 1 Solar_mass.")
     
     # Normalising the SFH is the correct total mass
     self.sfr *= mass/mass_norm
