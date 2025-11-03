@@ -1672,6 +1672,24 @@ class SpectrumMixin:
         class to generate a spectrum associated with that class. This function loads in
         the BPASS models (single or binary, can be selected), and applies a star-fromation
         history, dust attenuation, IGM attenuation and nebular attenuation and emission.
+
+        Attributes
+        ----------
+          mets :: array
+            Metallicity parameter space of the BPASS models
+
+          wavelengths :: `astropy.Quantity` array
+            The wavelengths of the spectrum, in Angstroms.
+
+          bpass_ages :: array
+            Age parameter space of the BPASS models, in units of yr
+
+          spectrum :: array of floats
+            BPASS emission spectrum template, in units of flam (erg/s/cm^2/AA).
+        
+        Returns
+        -------
+          None
         """
         ### CHECKING FOR CURRENT SPECTRUM ###
         ###-------------------------------###
@@ -1691,12 +1709,12 @@ class SpectrumMixin:
 
         # Checking that the age is included and not larger than the age of the Universe
         try:
-            self.pop_age = self.pars["age"]
+            pop_age = self.pars["age"]
         except:
             raise ValueError("The model parameters dictionary needs " +\
                                "`age` to be a definied key.")
-        if self.pop_age > self.uni_age:
-            raise ValueError(f"The inputted age of {self.pop_age} Gyr is " +\
+        if pop_age > self.uni_age:
+            raise ValueError(f"The inputted age of {pop_age} Gyr is " +\
                               "greater than the age of the Universe " +\
                               f"({round(self.uni_age, 3)} Gyr) at redshift " +\
                               f"{self.redshift}")
@@ -1814,9 +1832,9 @@ class SpectrumMixin:
               dist = self.pars["ldist"]
               # If only value provided, convert to Mpc
               if not isinstance(dist, u.Quantity):
-                self.ldist = (self.pars["ldist"] * u.Mpc)
+                self.ldist = (dist * u.Mpc)
               else:
-                self.ldist = self.pars["ldist"]
+                self.ldist = dist
                   
             except:
                 raise ValueError("For a input redshift of 0, the model " +\

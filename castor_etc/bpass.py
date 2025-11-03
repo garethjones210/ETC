@@ -93,32 +93,50 @@ from .filepaths import DATAPATH
 class star_formation_history:
   """ 
   Class to hold all the different star-formation history models. To be used with
-  the BPASSSource class. Also includes the functions to combine the star formation
+  the BPASSSource class. Includes the function to combine the star formation
   history with the chemical evolution history to generate weights for both the
-  metallicity files and the ages.
+  metallicity files and the SSP BPASS models.
   """
   def make_sfh_profile(self):
     """
-    TODO
+    Generates the star-formation history profile for the galaxy. This calls one
+    of the star-formation history profiles (burst, constant, delayed, custom)
+    to calculate the star-formation rate at each time step. This is used to
+    generate the weights for the BPASS SSP models.
+
+    Attributes
+    ----------
+      sfr :: array
+        The star formation rate in at each time in the star formation
+        history profile, in Solar_mass per yr
+
+      sfr_weights :: array
+        The weighting for each BPASS SSP model to give the desired star-
+        formation history profile (calculated as the star formation rate 
+        in each time bin times the width of the time bin)
+
+    Returns
+    -------
+      None
     """
     # Creating a finely sampled age array. This is done over the
     # same range as the BPASS grid (1 Myr to 100 Gyr), but with 
     # a much finer log sampling (0.001 instead of 0.1)
-    self.sfh_ages = np.arange(6., 11., 0.001)
+    sfh_ages_log = np.arange(6., 11., 0.001)
 
     # Converting from log space
-    self.sfh_ages = 10**self.sfh_ages
+    sfh_ages = 10**sfh_ages_log
 
     # Initialising width of time bin array
-    self.time_widths = np.zeros_like(self.sfh_ages)
+    time_widths = np.zeros_like(sfh_ages)
 
     # Calculating the total age width of each SSP model
-    self.time_widths[0] = self.sfh_ages[0] + (self.sfh_ages[1] - self.sfh_ages[0])/2.
-    self.time_widths[1:-1] = (self.sfh_ages[2:] - self.sfh_ages[:-2])/2.
-    self.time_widths[-1] = self.sfh_ages[-1] - self.sfh_ages[-2]
+    time_widths[0] = sfh_ages[0] + (sfh_ages[1] - sfh_ages[0])/2.
+    time_widths[1:-1] = (sfh_ages[2:] - sfh_ages[:-2])/2.
+    time_widths[-1] = sfh_ages[-1] - sfh_ages[-2]
 
     # Initialising star formation rate array for the SFH
-    self.sfr = np.zeros_like(self.sfh_ages)
+    self.sfr = np.zeros_like(sfh_ages)
 
     # Getting the inputted SFH model chosen
     try:
@@ -137,10 +155,10 @@ class star_formation_history:
                        f"following SFH models: {sfh_dir}")
     
     # Calling function to generated chosen SFH profile
-    getattr(self, sfh_model)(self.sfr, self.pars)
+    getattr(self, sfh_model)(self.sfr, self.pars, sfh_ages)
 
     # Getting the mass normalisation
-    mass_norm = np.sum(self.sfr * self.time_widths)
+    mass_norm = np.sum(self.sfr * time_widths)
 
     # Setting the total mass as 1 Solar mass
     mass = 1. #TODO Could change this to a notification if mass is not set or make compulsory
@@ -154,38 +172,71 @@ class star_formation_history:
 
     # Creating the weights for the simple stellar population models
     # by summing up the contributions within each bin
-    wei = self.sfr * self.time_widths
+    wei = self.sfr * time_widths
 
     # Calculating the bins for the SPS model grid
-    self.sps_bins = np.zeros(len(self.bpass_ages) + 1)
-    self.sps_bins[0] = 0.
-    self.sps_bins[1:-1] = (self.bpass_ages[1:] + self.bpass_ages[:-1])/2.
-    self.sps_bins[-1] = self.bpass_ages[-1]
+    sps_bins = np.zeros(len(self.bpass_ages) + 1)
+    sps_bins[0] = 0.
+    sps_bins[1:-1] = (self.bpass_ages[1:] + self.bpass_ages[:-1])/2.
+    sps_bins[-1] = self.bpass_ages[-1]
 
     # Mapping the weights from the finely sample array to the SPS
     # model grid by adding using a histogram
-    self.sfr_weights = np.histogram(self.sfh_ages, bins=self.sps_bins, 
+    self.sfr_weights = np.histogram(sfh_ages, bins=sps_bins, 
                                 weights=wei)[0]
 
 
-  def burst(self, sfr, pars):
+  def burst(self, sfr, pars, sfh_ages):
     """
-    A burst of star formation at one specific age,
-    defined by a delta function.
+    A burst of star formation at one specific age, defined by a delta function.
+
+    Parameters
+    ----------
+      sfr :: array of scalars
+        The star-formation rate at each time step.
+
+      pars :: dict
+        Dictionary containing the model parameters to generate a BPASS spectrum.
+        Keys are strings and values are floats.
+
+      sfh_ages :: array
+        The ages of the star formation history profile to calculate the star
+        formation rate at
+
+    Return
+    ------
+      None
     """
     # Getting the chosen input age
     burst_age = pars["age"] * 1.e9
 
     # Finding the age bin which is closest to the inputted age
     # and putting all star-formation into that one bin
-    sfr[np.argmin(np.abs(self.sfh_ages - burst_age))] += 1
+    sfr[np.argmin(np.abs(sfh_ages - burst_age))] += 1
   
 
-  def constant(self, sfr, pars):
+  def constant(self, sfr, pars, sfh_ages):
     """
     A constant star formation between the two age limits, with age
     representing the oldest stellar population created and age_min
     representing the youngest stellar population created.
+
+    Parameters
+    ----------
+      sfr :: array of scalars
+        The star-formation rate at each time step.
+
+      pars :: dict
+        Dictionary containing the model parameters to generate a BPASS spectrum.
+        Keys are strings and values are floats.
+      
+      sfh_ages :: array
+        The ages of the star formation history profile to calculate the star
+        formation rate at
+
+    Return
+    ------
+      None
     """
     # Getting the chosen input age
     age_max = pars["age"] * 1.e9
@@ -204,17 +255,34 @@ class star_formation_history:
                        f"{age_max/1.e9} Gyr.")
 
     # Creating a mask to only include ages betwen the max and min
-    mask = (self.sfh_ages > age_min) & (self.sfh_ages < age_max)
+    mask = (sfh_ages > age_min) & (sfh_ages < age_max)
 
     # Setting the SFR at ages between the max and min age as equal
     sfr[mask] +=1
 
 
-  def delayed(self, sfr, pars):
+  def delayed(self, sfr, pars, sfh_ages):
     """
     A delayed-tau star formation history profile following the equation
     SFR ~ t*e^(-t/tau), where t is the time since star formation started,
     and tau is the characteristic timescale of decrease in the SFR.
+
+    Parameters
+    ----------
+      sfr :: array of scalars
+        The star-formation rate at each time step.
+
+      pars :: dict
+        Dictionary containing the model parameters to generate a BPASS spectrum.
+        Keys are strings and values are floats.
+      
+      sfh_ages :: array
+        The ages of the star formation history profile to calculate the star
+        formation rate at
+
+    Return
+    ------
+      None
     """
     # Getting the chosen input age
     age_max = pars["age"] * 1.e9
@@ -227,15 +295,32 @@ class star_formation_history:
       tau = 1.e9
 
     # Calculating the time since star formation started
-    time = age_max - self.sfh_ages[self.sfh_ages < age_max]
+    time = age_max - sfh_ages[sfh_ages < age_max]
 
     # Calculating the delayed SFH profile SFR in each time bin
-    sfr[self.sfh_ages < age_max] = time * np.exp(-time/tau)
+    sfr[sfh_ages < age_max] = time * np.exp(-time/tau)
 
 
-  def custom(self, sfr, pars):
+  def custom(self, sfr, pars, sfh_ages):
     """
     Custom star formation history profile inputted by the user.
+
+    Parameters
+    ----------
+      sfr :: array of scalars
+        The star-formation rate at each time step.
+
+      pars :: dict
+        Dictionary containing the model parameters to generate a BPASS spectrum.
+        Keys are strings and values are floats.
+
+      sfh_ages :: array
+        The ages of the star formation history profile to calculate the star
+        formation rate at
+
+    Return
+    ------
+      None
     TODO
     """
     raise ValueError("This is still a work in progress. Please check " +\
@@ -244,7 +329,20 @@ class star_formation_history:
 
   def make_ceh_profile(self):
     """
-    TODO
+    Generates the chemical-evolution history profile for the galaxy. This calls
+    one of the two functions `fixed_met` or `evolving_met` which calculates the
+    profile.
+
+    Attributes
+    ----------
+      sfh_ceh_grid :: array
+        A 2D array containing the weightings for the metallicity models and the
+        SSP BPASS models. It takes the SFR weightings for each SSP BPASS model
+        and splits this between the metallicity models in BPASS.
+
+    Returns
+    -------
+      None
     """
     # Making a 2D array to store the SFH weights as a function of metallicity,
     # where axis zero runs along metallicity, and axis one runs along the ages
@@ -268,25 +366,29 @@ class star_formation_history:
   def fixed_met(self):
     """
     Function to distribute the SFR between the two adjacent metallicity SSP
-    models when a fixed metallicity is inputted
+    models when a fixed metallicity is inputted.
+
+    Returns
+    -------
+      None
     """
     # Getting the chosen metallicity and checking that it is valid
     try:
-      self.input_met = self.pars["metallicity"]
+      input_met = self.pars["metallicity"]
     except:
       raise ValueError("The model parameters dictionary needs " +\
                          "`metallicity` to be a definied key.")
-    if not isinstance(self.input_met, (int, float)):
+    if not isinstance(input_met, (int, float)):
       raise ValueError("The fixed metallicity assumption requires " +\
                        "the inputted metallicity to be a single " +\
                        "float value.")
-    if self.input_met < self.mets[0] or self.input_met > self.mets[-1]:
+    if input_met < self.mets[0] or input_met > self.mets[-1]:
       raise ValueError("The inputted metallicity is outside the grid. " +\
                        "Please ensure the metallicity is between " +\
                        f"{self.mets[0]} and {self.mets[-1]}.")
     
     # Determining the upper grid metallicity points
-    up_ind = self.mets[self.mets < self.input_met].shape[0]
+    up_ind = self.mets[self.mets < input_met].shape[0]
 
     # If lowest metallicity is chosen:
     if up_ind == 0:
@@ -299,7 +401,7 @@ class star_formation_history:
       met_width = self.mets[up_ind] - self.mets[up_ind - 1]
 
       # Calculating the weighting for the upper metallicity
-      up_wei = (self.input_met - self.mets[up_ind - 1])/met_width
+      up_wei = (input_met - self.mets[up_ind - 1])/met_width
 
       # Combining metallicity weighting with the SFH weight to determine
       # the overall weighting for each time bin in each SSP model
@@ -321,6 +423,10 @@ class spec_attenuation:
   To be used with the BPASSSource class. This includes dust attenuation, nebular
   attenuation, and intergalactic medium attenuation and their associated
   functions (i.e. different dust attenuation models).
+
+  Returns
+  -------
+    None
   """
   def make_dust_attenuation(self):
     """
@@ -336,6 +442,14 @@ class spec_attenuation:
     extinction ratio (describes shape of extinction curve). This allows for the
     dust attenuation to be calculated as 10**(-0.4 * A_lambda * Av).
 
+    Attributes
+    ----------
+      Alam :: array
+        Extinction value as a function of wavelength.
+    
+    Returns
+    -------
+      None
     TODO Add other dust attenuation laws
     """
     # Getting the inputted dust attenuation model chosen
@@ -362,6 +476,10 @@ class spec_attenuation:
     """
     Dust extinction law of Calzetti et al. (2000). The Rv value is set
     as 4.05 as defined in the publication.
+
+    Returns
+    -------
+      None
     """
     # Converting the wavelength to microns
     mu_wave = self.wavelengths * 1.e-4
@@ -399,6 +517,10 @@ class spec_attenuation:
     """
     Dust attenuation law model parameters for Salim et al. (2018) for
     the average curve of all star-forming galaxies, as given in Table 1.
+
+    Returns
+    -------
+      None
     """
     # Extinction law parameter values
     B, a0, a1, a2, a3, Rv = 1.57, -4.30, 2.71, -0.191, 0.0121, 3.15
@@ -411,6 +533,10 @@ class spec_attenuation:
     """
     Dust attenuation law model parameters for Salim et al. (2018) for
     the average curve of all quiescent galaxies, as given in Table 1.
+
+    Returns
+    -------
+      None
     """
     # Extinction law parameter values
     B, a0, a1, a2, a3, Rv = 2.21, -3.72, 2.20, -0.062, 0.0080, 2.61
@@ -424,6 +550,10 @@ class spec_attenuation:
     Dust attenuation law model parameters for Salim et al. (2018).
     This allows for a custom set of model parameters to be provided
     for the law via the model parameter input dictionary.
+
+    Returns
+    -------
+      None
     """
     # Unpacking extinction law parameter values from input dictionary
     # B
@@ -511,6 +641,10 @@ class spec_attenuation:
       Rv :: float
         The total-to-selective extinction ratio which describes the shape 
         of the attenuation curve.
+
+    Returns
+    -------
+      None
     """
     # Converting the wavelength to microns
     mu_wave = self.wavelengths * 1.e-4
@@ -553,6 +687,11 @@ class spec_attenuation:
       wavs :: array
         The rest-frame wavelengths of the model at which to calculate the
         transmission function for
+    
+    Returns
+    -------
+      tau :: array
+        Intergalacitc medium optical depth as a function of wavelength
     """
     # File containing the wavelengths and coefficients for Lyman-series
     # absorption as given in Table 2 of Inoue et al. (2018).
@@ -726,14 +865,58 @@ def make_bpass_source(base_source, model_parameters):
     model_parameters :: dict
       Dictionary containing the model parameters to generate a BPASS spectrum.
       Keys are strings and values are floats.
+  
+  Returns
+  -------
+    None
   """
-  class BPASSSource(base_source, star_formation_history, spec_attenuation):
+  class BPASSSource(star_formation_history, spec_attenuation, base_source):
     """
-    TODO
+    Creates a class containing all the attributes to generate a BPASS spectrum.
+    During initiation, generates a BPASS emission spectrum from a desired set
+    of inputs. Inherits class properties from one of the classes in the 
+    `source` program.
+
+    Parameters
+    ----------
+      base_soruce :: class
+        A class from the program `sources` from which this class inherits
+    
+    Returns
+    -------
+      None
     """
     def __init__(self, *args, **kwargs):
       """
-      TODO
+      Generates the class, its inheritance from a `source` class, and the
+      BPASS emission spectrum.
+
+      Parameters
+      ----------
+        *args :: tuple
+          Parameters required to initialise the source class
+
+        **kwargs :: dict
+          Parameters required to initialise the source class
+
+      Attributes
+      ----------
+        pars :: dict
+          Dictionary containing the model parameters to generate a BPASS spectrum.
+          Keys are strings and values are floats.
+
+        redshift :: float
+          The redshift of the object for which an emission spectrum is being generated
+        
+        uni_age :: float
+          Age of the Universe at the redshift of the object, in units of Gyr
+
+        ldist :: float
+          Luminosity distance to the object at the inputted redshift, in Mpc
+      
+      Returns
+      -------
+        None
       """
       # Storing the model parameter dictionary as part of the class
       self.pars = model_parameters
@@ -753,15 +936,13 @@ def make_bpass_source(base_source, model_parameters):
       # Initialising the main source
       super().__init__(*args, **kwargs)
 
-      # Initialising the cosmology of the Universe, which will be used for
-      # calculating the age of the Universe and distance luminoisty
-      self.cosmo = Planck18
-
+      # Using the Planck18 comoslogy from astropy to calculate properties
+      # at the inputted redshift
       # Age of the Universe at the given redshift in Gyr
-      self.uni_age = self.cosmo.age(self.redshift).value
+      self.uni_age = self.Planck18.age(self.redshift).value
 
       # Luminoisty distance at the given redshift in Mpc
-      self.ldist = self.cosmo.luminosity_distance(self.redshift)
+      self.ldist = self.Planck18.luminosity_distance(self.redshift)
 
       # Generating the spectrum from the function in the spectrum.py program
       self.gen_bpass_spec()
@@ -818,6 +999,10 @@ def make_bpass_stellar_file(filepath, name_comp={}):
 
     name_comp :: dict
       Dictionary containing the file name component parts (i.e. IMF variant)
+
+  Returns
+  -------
+    None
   """
   # Metallicity value names used in the BPASS file names
   met_nams = ["zem5", "zem4", "z001", "z002", "z003", "z004",
@@ -918,5 +1103,10 @@ def make_bpass_nebular_file(filepath):
   ----------
     filepath :: str
       Path to the directory where the BPASS nebular files are stored
+  
+  Returns
+  -------
+    None
   """
+  #TODO
 
