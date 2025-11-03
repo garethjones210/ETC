@@ -333,12 +333,21 @@ class star_formation_history:
                          "`sf_history` to be a definied key for the " +\
                           "custom SFH profile.")
     
+    # Checking if any SFH profile ages are greater than the input age or the
+    # age of the Universe
+    if any(history[:,0] > self.pars["age"]):
+      print("Note: Some of the ages in the custom SFH are greater than " +\
+             "the age set as an input.")
+    if any(history[:,0] > self.uni_age):
+      print("Note: Some of the ages in the custom SFH are greater than " +\
+             "the age of the Universe. These will have SFRs set to zero.")
+    
     # Interpolating onto the spectrum grid
     sfr[:] = np.interp(sfh_ages, history[:,0], history[:,1], left=0, right=0)
 
     # Ensuring that anything greater than the age of the Universe has
     # zero star formation
-    sfr[sfh_ages > self.uni_age] = 0.
+    sfr[sfh_ages > self.uni_age * 1.e9] = 0.
   
 
   def make_ceh_profile(self):
