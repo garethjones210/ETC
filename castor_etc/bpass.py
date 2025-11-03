@@ -335,11 +335,11 @@ class star_formation_history:
     
     # Checking if any SFH profile ages are greater than the input age or the
     # age of the Universe
-    if any(history[:,0] > self.pars["age"]):
+    if any(history[:,0] > self.pars["age"] * 1.e9):
       print("Note: Some of the ages in the custom SFH are greater than " +\
-             "the age set as an input.")
-    if any(history[:,0] > self.uni_age):
-      print("Note: Some of the ages in the custom SFH are greater than " +\
+             "the age set in the dictionary under `age`.")
+    if any(history[:,0] > self.uni_age * 1.e9):
+      print("Warning: Some of the ages in the custom SFH are greater than " +\
              "the age of the Universe. These will have SFRs set to zero.")
     
     # Interpolating onto the spectrum grid
@@ -382,7 +382,7 @@ class star_formation_history:
         raise ValueError(f"The input metallicity mode of {self.pars['met_mode']} " +\
                          "is invalid. Please use either `fixed` or `evolving`.")
     else:
-      print("Input `met_mode` is not including. Using fixed metallicity assumption.")
+      print("Input `met_mode` has not been included. Using fixed metallicity assumption.")
       self.fixed_met()
   
 
@@ -434,10 +434,52 @@ class star_formation_history:
 
   def evolving_met(self):
     """
-    TODO
+    Function to distribute the SFR between the metallicity models based
+    on a chemical evolution history profile, allowing the metallicity to
+    evolve with age. This requires a 2D input array of [[t,Z]], where
+    axis zero is the age in yr and axis one is the metallicity at each age.
     """
-    # Will write code here later
-    raise ValueError("Need to sort later, check in again soon!")
+    # Getting the input metallicity array and checking it is valid
+    try:
+      met_array = self.pars["metallicity"]
+    except:
+      raise ValueError("The model parameters dictionary needs " +\
+                         "`metallicity` to be a definied key.")
+    
+    if isinstance(met_array, (int, float)):
+      raise ValueError("The evolving metallicity assumption requires " +\
+                       "the inputted metallicity to be an array of " +\
+                       "[[t (in yr), Z]].")
+    if any(met_array[:,1] < self.mets[0]) or any(met_array[:,1] > self.mets[-1]):
+      raise ValueError("An input metallicity value is outside the grid. " +\
+                       "Please ensure all metallicity values are between " +\
+                       f"{self.mets[0]} and {self.mets[-1]}.")
+    
+    # Interpolating onto the BPASS model ages
+    ceh_met = np.interp(self.bpass_ages, met_array[:,0], met_array[:,1])
+
+    # Determining the upper grid metallicity points
+    up_inds = [self.mets[self.mets < x].shape[0] for x in ceh_met]
+
+    # Looping over the time bins
+    for i, ind in enumerate(up_inds):
+      # If lowest metallicity is chosen:
+      if ind == 0:
+        # Set all weight in the lowest metallicity bin
+        self.sfh_ceh_grid[0,i] = self.sfr_weights[i]
+      else:
+        # Split the weighting between the two nearest bins
+      
+        # Calculating the metallicity bin width
+        met_width = self.mets[ind] - self.mets[ind - 1]
+
+        # Calculating the weighting for the upper metallicity
+        up_wei = (ceh_met[i] - self.mets[ind - 1])/met_width
+
+        # Combining metallicity weighting with the SFH weight to determine
+        # the overall weighting for each time bin in each SSP model
+        self.sfh_ceh_grid[ind,i] = self.sfr_weights[i] * up_wei
+        self.sfh_ceh_grid[ind - 1,i] = self.sfr_weights[i] * (1 - up_wei)
   
 
 class spec_attenuation:
