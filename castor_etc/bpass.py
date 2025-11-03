@@ -155,7 +155,7 @@ class star_formation_history:
                        f"following SFH models: {sfh_dir}")
     
     # Calling function to generated chosen SFH profile
-    getattr(self, sfh_model)(self.sfr, self.pars, sfh_ages)
+    getattr(self, sfh_model)(self.sfr, sfh_ages)
 
     # Getting the mass normalisation
     mass_norm = np.sum(self.sfr * time_widths)
@@ -186,7 +186,7 @@ class star_formation_history:
                                 weights=wei)[0]
 
 
-  def burst(self, sfr, pars, sfh_ages):
+  def burst(self, sfr, sfh_ages):
     """
     A burst of star formation at one specific age, defined by a delta function.
 
@@ -208,14 +208,14 @@ class star_formation_history:
       None
     """
     # Getting the chosen input age
-    burst_age = pars["age"] * 1.e9
+    burst_age = self.pars["age"] * 1.e9
 
     # Finding the age bin which is closest to the inputted age
     # and putting all star-formation into that one bin
     sfr[np.argmin(np.abs(sfh_ages - burst_age))] += 1
   
 
-  def constant(self, sfr, pars, sfh_ages):
+  def constant(self, sfr, sfh_ages):
     """
     A constant star formation between the two age limits, with age
     representing the oldest stellar population created and age_min
@@ -239,11 +239,11 @@ class star_formation_history:
       None
     """
     # Getting the chosen input age
-    age_max = pars["age"] * 1.e9
+    age_max = self.pars["age"] * 1.e9
 
     # Setting the minimum age, checking if input else using default value
-    if "age_min" in list(pars):
-      age_min = pars["age_min"] * 1.e9
+    if "age_min" in list(self.pars):
+      age_min = self.pars["age_min"] * 1.e9
     else:
       print("No age set for `age_min`. Using default value of 0 Gyrs.")
       age_min = 0.
@@ -261,7 +261,7 @@ class star_formation_history:
     sfr[mask] +=1
 
 
-  def delayed(self, sfr, pars, sfh_ages):
+  def delayed(self, sfr, sfh_ages):
     """
     A delayed-tau star formation history profile following the equation
     SFR ~ t*e^(-t/tau), where t is the time since star formation started,
@@ -285,11 +285,11 @@ class star_formation_history:
       None
     """
     # Getting the chosen input age
-    age_max = pars["age"] * 1.e9
+    age_max = self.pars["age"] * 1.e9
 
     # Setting the tau value, checking if input else using default value
-    if "tau" in list(pars):
-      tau = pars["tau"] * 1.e9
+    if "tau" in list(self.pars):
+      tau = self.pars["tau"] * 1.e9
     else:
       print("No tau value set for delayed SFH. Using default value of 1 Gyrs.")
       tau = 1.e9
@@ -301,7 +301,7 @@ class star_formation_history:
     sfr[sfh_ages < age_max] = time * np.exp(-time/tau)
 
 
-  def custom(self, sfr, pars, sfh_ages):
+  def custom(self, sfr, sfh_ages):
     """
     Custom star formation history profile inputted by the user.
 
@@ -321,10 +321,24 @@ class star_formation_history:
     Return
     ------
       None
-    TODO
     """
-    raise ValueError("This is still a work in progress. Please check " +\
-                     "again soon and hopefully it will be implemented.")
+    # Checking that a custom SFH array has been included
+    # This is an array which defines the SFR as a function of time, with
+    # the axis 0 being the time in yr and axis 1 being the SFR at each
+    # time in solar_mass per yr.
+    try:
+      history = self.pars['sf_history']
+    except:
+      raise ValueError("The model parameters dictionary needs " +\
+                         "`sf_history` to be a definied key for the " +\
+                          "custom SFH profile.")
+    
+    # Interpolating onto the spectrum grid
+    sfr[:] = np.interp(sfh_ages, history[:,0], history[:,1], left=0, right=0)
+
+    # Ensuring that anything greater than the age of the Universe has
+    # zero star formation
+    sfr[sfh_ages > self.uni_age] = 0.
   
 
   def make_ceh_profile(self):
@@ -939,10 +953,10 @@ def make_bpass_source(base_source, model_parameters):
       # Using the Planck18 comoslogy from astropy to calculate properties
       # at the inputted redshift
       # Age of the Universe at the given redshift in Gyr
-      self.uni_age = self.Planck18.age(self.redshift).value
+      self.uni_age = Planck18.age(self.redshift).value
 
       # Luminoisty distance at the given redshift in Mpc
-      self.ldist = self.Planck18.luminosity_distance(self.redshift)
+      self.ldist = Planck18.luminosity_distance(self.redshift)
 
       # Generating the spectrum from the function in the spectrum.py program
       self.gen_bpass_spec()
