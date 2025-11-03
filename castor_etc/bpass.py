@@ -72,7 +72,8 @@ This includes the following classes and functions:
   - spec_attenuation
   - make_bpass_source
   - BPASS_spec
-  - make_bpass_stellar_files
+  - make_bpass_stellar_file
+  - make_bpass_nebular_file
 """
 
 import os
@@ -802,10 +803,10 @@ def BPASS_spec(base_source, model_parameters, *args, **kwargs):
   return bpass_class(*args, **kwargs)
 
 
-def make_bpass_stellar_files(filepath, name_comp={}):
+def make_bpass_stellar_file(filepath, name_comp={}):
   """
-  Makes the BPASS fit file required to run the BPASS spectrum generation
-  code in FORECASTOR, storing the generated fit file in the directory
+  Makes the BPASS fits file required to run the BPASS spectrum generation
+  code in FORECASTOR, storing the generated fits file in the directory
   `/castor_etc/data/bpass_files/`. The BPASS files need to be downloaded
   from the BPASS website and stored in a directory, which is passed as
   an argument to this function.
@@ -901,3 +902,21 @@ def make_bpass_stellar_files(filepath, name_comp={}):
   # Printing the file has been saved along with its name
   print(f"File {sav_pri + '_stellar_grids.fits'} has been saved " +
          f"in directory {join(DATAPATH, 'bpass_files')}")
+  
+
+def make_bpass_nebular_file(filepath):
+  """
+  Makes the BPASS nebular fits file required to generate nebular emission
+  when running the BPASS spectrum generation code in FORECASTOR, storing
+  the generated fits file in the directory `/castor_etc/data/bpass_files/`.
+  This uses the BPASS generated nebular emission files, which are only
+  currently available on the BPASS website for v2.2.1. The BPASS nebular
+  files need to be downloaded from the BPASS website and stored in a
+  directory, which is passes as an argument to this function.
+
+  Parameters
+  ----------
+    filepath :: str
+      Path to the directory where the BPASS nebular files are stored
+  """
+
