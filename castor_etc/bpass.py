@@ -142,7 +142,7 @@ class star_formation_history:
     try:
       sfh_model = self.pars["sfh_model"]
     except:
-      raise ValueError("The model parameters dictionary needs " +\
+      raise KeyError("The model parameters dictionary needs " +\
                          "`sfh_model` to be a definied key.")
 
     # Permitted SFH models
@@ -253,9 +253,9 @@ class star_formation_history:
 
     # Ensure that the minimum age is less than the maximum age
     if age_min >= age_max:
-      raise ValueError(f"The input value for `age_min` {age_min/1.e9} " +\
+      raise ValueError(f"The input value for `age_min` ({age_min/1.e9}) " +\
                        "Gyr needs to be less than the input for age " +\
-                       f"{age_max/1.e9} Gyr.")
+                       f"({age_max/1.e9}) Gyr.")
 
     # Creating a mask to only include ages betwen the max and min
     mask = (sfh_ages > age_min) & (sfh_ages < age_max)
@@ -332,7 +332,7 @@ class star_formation_history:
     try:
       history = self.pars['sf_history']
     except:
-      raise ValueError("The model parameters dictionary needs " +\
+      raise KeyError("The model parameters dictionary needs " +\
                          "`sf_history` to be a definied key for the " +\
                           "custom SFH profile.")
     
@@ -402,10 +402,10 @@ class star_formation_history:
     try:
       input_met = self.pars["metallicity"]
     except:
-      raise ValueError("The model parameters dictionary needs " +\
+      raise KeyError("The model parameters dictionary needs " +\
                          "`metallicity` to be a definied key.")
     if not isinstance(input_met, (int, float)):
-      raise ValueError("The fixed metallicity assumption requires " +\
+      raise TypeError("The fixed metallicity assumption requires " +\
                        "the inputted metallicity to be a single " +\
                        "float value.")
     if input_met < self.mets[0] or input_met > self.mets[-1]:
@@ -446,11 +446,11 @@ class star_formation_history:
     try:
       met_array = self.pars["metallicity"]
     except:
-      raise ValueError("The model parameters dictionary needs " +\
+      raise KeyError("The model parameters dictionary needs " +\
                          "`metallicity` to be a definied key.")
     
     if isinstance(met_array, (int, float)):
-      raise ValueError("The evolving metallicity assumption requires " +\
+      raise TypeError("The evolving metallicity assumption requires " +\
                        "the inputted metallicity to be an array of " +\
                        "[[t (in yr), Z]].")
     if any(met_array[:,1] < self.mets[0]) or any(met_array[:,1] > self.mets[-1]):
@@ -523,7 +523,7 @@ class spec_attenuation:
     try:
       dust_model = self.pars["dust_model"]
     except:
-      raise ValueError("The model parameters dictionary needs " +\
+      raise KeyError("The model parameters dictionary needs " +\
                          "`dust_model` to be a definied key.")
 
     # Permitted dust attenuation models
@@ -550,7 +550,7 @@ class spec_attenuation:
       None
     """
     # Converting the wavelength to microns
-    mu_wave = self.wavelengths * 1.e-4
+    mu_wave = self.wavelengths.value * 1.e-4
 
     # Creating masks for each regime of the law
     mask1 = (mu_wave < 0.12)
@@ -593,7 +593,7 @@ class spec_attenuation:
       None
     """
     # Converting the wavelength to inverse microns
-    imu_wave = 1./(self.wavelengths * 1.e-4)
+    imu_wave = 1./(self.wavelengths.value * 1.e-4)
 
     # Creating masks for each regime of the law
     mask1 = (imu_wave < 1.1)
@@ -703,7 +703,7 @@ class spec_attenuation:
     try:
       B = self.pars['salim_B']
     except:
-      raise ValueError("To use the custom Salim et al. (2018) law " +\
+      raise KeyError("To use the custom Salim et al. (2018) law " +\
                         "the model parameters dictionary needs " +\
                          "`salim_B` to be a definied key.")
     
@@ -711,7 +711,7 @@ class spec_attenuation:
     try:
       a0 = self.pars['salim_a0']
     except:
-      raise ValueError("To use the custom Salim et al. (2018) law " +\
+      raise KeyError("To use the custom Salim et al. (2018) law " +\
                         "the model parameters dictionary needs " +\
                          "`salim_a0` to be a definied key.")
     
@@ -719,7 +719,7 @@ class spec_attenuation:
     try:
       a1 = self.pars['salim_a1']
     except:
-      raise ValueError("To use the custom Salim et al. (2018) law " +\
+      raise KeyError("To use the custom Salim et al. (2018) law " +\
                         "the model parameters dictionary needs " +\
                          "`salim_a1` to be a definied key.")
     
@@ -727,7 +727,7 @@ class spec_attenuation:
     try:
       a2 = self.pars['salim_a2']
     except:
-      raise ValueError("To use the custom Salim et al. (2018) law " +\
+      raise KeyError("To use the custom Salim et al. (2018) law " +\
                         "the model parameters dictionary needs " +\
                          "`salim_a2` to be a definied key.")
     
@@ -735,7 +735,7 @@ class spec_attenuation:
     try:
       a3 = self.pars['salim_a3']
     except:
-      raise ValueError("To use the custom Salim et al. (2018) law " +\
+      raise KeyError("To use the custom Salim et al. (2018) law " +\
                         "the model parameters dictionary needs " +\
                          "`salim_a3` to be a definied key.")
     
@@ -743,7 +743,7 @@ class spec_attenuation:
     try:
       Rv = self.pars['salim_Rv']
     except:
-      raise ValueError("To use the custom Salim et al. (2018) law " +\
+      raise KeyError("To use the custom Salim et al. (2018) law " +\
                         "the model parameters dictionary needs " +\
                          "`salim_Rv` to be a definied key.")
     
@@ -790,7 +790,7 @@ class spec_attenuation:
       None
     """
     # Converting the wavelength to microns
-    mu_wave = self.wavelengths * 1.e-4
+    mu_wave = self.wavelengths.value * 1.e-4
 
     # Calculating the Drude profile
     drude = (B * (mu_wave**2) * (0.035**2))
@@ -1069,7 +1069,7 @@ def make_bpass_source(base_source, model_parameters):
       try:
         self.redshift = self.pars['redshift']
       except:
-        raise ValueError("The model parameters dictionary needs " +\
+        raise KeyError("The model parameters dictionary needs " +\
                          "`redshift` to be a definied key.")
       
       if not (self.redshift >= 0.):
