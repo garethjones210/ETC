@@ -1747,7 +1747,7 @@ class SpectrumMixin:
         # Wavelengths of each point in the spectrum in units of Angstroms
         self.wavelengths = fits.open(filepath)[-1].data.astype(float) * u.AA
 
-        # Ages of each SSP model in BPASS in Gyr
+        # Ages of each SSP model in BPASS in yr
         self.bpass_ages = fits.open(filepath)[-2].data.astype(float)
 
         # SSP stellar model grids, stored as FITS HDUList, with each HDU
@@ -1775,12 +1775,28 @@ class SpectrumMixin:
 
         # Using the SFH and CEH weightings to combine the SSP models into
         # a single CSP model
+        spectrum_bc = np.zeros(len(self.wavelengths))
         self.spectrum = np.zeros(len(self.wavelengths))
+
+        # Getting the birth cloud dispersion age from the input parameters
+        # in units of Myr, so multiply by 10^6 to get years
+        if "bc_age" in list(self.pars):
+            bc_age = self.pars["bc_age"] * 1.e6
+        else:
+            bc_age = 0.
+
+        # Getting the maximum aged SSP BPASS model that is included in the
+        # birth cloud to create a spectrum during and after the birth cloud
+        bc_ind = len([x for x in self.bpass_ages if x < bc_age])
 
         # Looping over the metallicity SSP models
         for i, ssp_model in enumerate(ssp_grid):
             if self.sfh_ceh_grid[i].sum() > 0.:
-                self.spectrum += np.sum(ssp_model * self.sfh_ceh_grid[i], axis=1)
+                spectrum_bc += np.sum(ssp_model[:,:bc_ind] * 
+                                           self.sfh_ceh_grid[i,:bc_ind], axis=1)
+                
+                self.spectrum += np.sum(ssp_model[:,bc_ind:] * 
+                                        self.sfh_ceh_grid[i,bc_ind:], axis=1)
 
         ### NEBULAR ATTENUATION ###
         ###---------------------###
@@ -1800,8 +1816,23 @@ class SpectrumMixin:
             raise KeyError("The model parameters dictionary needs " +\
                                "`dust_Av` to be a definied key.")
         
+        if "bc_fact" in list(self.pars):
+            eta = self.pars["bc_fact"]
+        else:
+            eta = 1.
+            if bc_age > 0.:
+                print("A birth cloud age has been set using the `bc_age` " +\
+                      "input. However, there is no input for the extra " +\
+                      "dust attenuation factor. Please set this using " +\
+                      "the key `bc_fact`. Using default of 1 (i.e. zero " +\
+                      "difference to the ISM dust attenuation.")
+        
         # Applying dust attenuation to the spectrum
         self.spectrum *= 10**(-0.4 * Av * self.Alam)
+        spectrum_bc *= 10**(-0.4 * Av * eta * self.Alam)
+
+        # Adding the birth cloud spectrum to the overall spectrum
+        self.spectrum += spectrum_bc
 
         ### INTERGALACTIC MEDIUM ATTENUATION ###
         ###----------------------------------###
@@ -1867,7 +1898,7 @@ class SpectrumMixin:
         self.wavelengths *= (1. + self.redshift)
 
         # Applying a wavelength mask to remove storage of excess information
-        mask = (self.wavelengths.value > 1000) & (self.wavelengths.value < 7000)
+        mask = (self.wavelengths.value > 1000.) & (self.wavelengths.value < 7000.)
         self.wavelengths = self.wavelengths[mask]
         self.spectrum = self.spectrum[mask]
 
