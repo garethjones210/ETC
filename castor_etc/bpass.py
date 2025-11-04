@@ -518,7 +518,6 @@ class spec_attenuation:
     Returns
     -------
       None
-    TODO Add other dust attenuation laws
     """
     # Getting the inputted dust attenuation model chosen
     try:
@@ -528,7 +527,8 @@ class spec_attenuation:
                          "`dust_model` to be a definied key.")
 
     # Permitted dust attenuation models
-    dust_dir = np.array(["calzetti", "salim_sf", "salim_qui", "salim_custom"])
+    dust_dir = np.array(["calzetti", "cardelli",
+                         "salim_sf", "salim_qui", "salim_custom"])
 
     # Checking that the chosen SFH is valid
     if not dust_model in dust_dir:
@@ -579,6 +579,81 @@ class spec_attenuation:
 
     # Converting from klam to Alam by dividing by Rv
     self.Alam = klam/4.05
+
+
+  def cardelli(self):
+    """
+    Dust attenuation law following the presciption of Cardelli et al.
+    (1989), as defined for the Milky Way. Here, Rv is taken to be 3.1
+    as is canonically defined for the Milky Way. This uses the updated
+    model by O'Donnell (1994) for the region 1.1<=x<3.3 micron^-1.
+
+    Returns
+    -------
+      None
+    """
+    # Converting the wavelength to inverse microns
+    imu_wave = 1./(self.wavelengths * 1.e-4)
+
+    # Creating masks for each regime of the law
+    mask1 = (imu_wave < 1.1)
+    mask2 = (imu_wave >= 1.1) & (imu_wave < 3.3)
+    mask3 = (imu_wave >= 3.3) & (imu_wave < 5.9)
+    mask4 = (imu_wave >= 5.9) & (imu_wave < 8.)
+    mask5 = (imu_wave >= 8.)
+
+    # Creating masked wavelength regimes
+    imu1 = imu_wave[mask1]
+    imu2 = imu_wave[mask2]
+    imu3 = imu_wave[mask3]
+    imu4 = imu_wave[mask4]
+    imu5 = imu_wave[mask5]
+
+    # Creating storage array for Alam
+    Alam = np.zeros_like(imu_wave)
+
+    # Calculating the extinction in the first regime (x < 1.1 micron^-1)
+    Alam[mask1] = ((0.574 * imu1**1.61) - (0.527 * imu1**1.61)/3.1)
+
+    # Calculating the extinction in the second regime (1.1 <= x < 3.3 micron^-1)
+    # This uses the result from O'Donnell (1994) rather than the expression
+    # from Cardelli et al. (1989)
+    y = imu2 - 1.82
+
+    #Alam[mask2] = ((1 + 0.17699 * y - 0.50447 * y**2 - 0.02427 * y**3
+    #                + 0.72086 * y**4 + 0.01979 * y**5 - 0.77530 * y**6
+    #                + 0.32999 * y**7) +
+    #                 (1.41338 * y + 2.28305 * y**2 + 1.07233 * y**3
+    #                  - 5.38434 * y**4 - 0.62251 * y**5 + 5.30260 * y**6
+    #                  - 2.09002 * y**7)/3.1)
+
+    Alam[mask2] = ((1 + 0.104 * y - 0.609 * y**2 + 0.701 * y**3
+                    + 1.137 * y**4 - 1.718 * y**5 - 0.827 * y**6
+                    + 1.647 * y**7 - 0.505 * y**8)
+                    + (1.952 * y + 2.908 * y**2 - 3.989 * y**3
+                       - 7.985 * y**4 + 11.102 * y**5 + 5.491 * y**6
+                       - 10.805 * y**7 + 3.347 * y**8)/3.1)
+    
+    # Calculating the extinction in the third regime (3.3 <= x < 5.9 micron^-1)
+    Alam[mask3] = ((1.752 - 0.316 * imu3 - 0.104/((imu3 - 4.67)**2 + 0.341))
+                    + (-3.090 + 1.825 * imu3 + 1.206/((imu3 - 4.62)**2
+                    + 0.263))/3.1)
+    
+    # Calculating the extinction in the fourth regime (5.9 <= x < 8 micron^-1)
+    Alam[mask4] = ((1.752 - 0.316 * imu4 - 0.104/((imu4 - 4.67)**2 + 0.341)
+                    - 0.04473 * (imu4 - 5.9)**2 - 0.009779 * (imu4 - 5.9)**3)
+                    + (-3.090 + 1.825 * imu4 + 1.206/((imu4 - 4.62)**2
+                       + 0.263) + 0.2130 * (imu4 - 5.9)**2 
+                       + 0.1207 * (imu4 - 5.9)**3)/3.1)
+    
+    # Calculating the extinction in the fifth regime (x > 8 micron^-1)
+    Alam[mask5] = ((-1.073 - 0.628 * (imu5 - 8) + 0.137 * (imu5 - 8)**2
+                    - 0.070 * (imu5 - 8)**3)
+                    + (13.670 + 4.257 * (imu5 - 8)
+                       - 0.420 * (imu5 - 8)**2 + 0.374 * (imu5 - 8)**3)/3.1)
+    
+    # Appending to the class
+    self.Alam = Alam
 
 
   def salim_sf(self):
