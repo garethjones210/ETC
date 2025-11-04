@@ -1711,7 +1711,7 @@ class SpectrumMixin:
         try:
             pop_age = self.pars["age"]
         except:
-            raise ValueError("The model parameters dictionary needs " +\
+            raise KeyError("The model parameters dictionary needs " +\
                                "`age` to be a definied key.")
         if pop_age > self.uni_age:
             raise ValueError(f"The inputted age of {pop_age} Gyr is " +\
@@ -1719,16 +1719,24 @@ class SpectrumMixin:
                               f"({round(self.uni_age, 3)} Gyr) at redshift " +\
                               f"{self.redshift}")
 
-        # Loading in the BPASS file from the data folder
+        # Getting the in the BPASS file name
         if "type" in list(self.pars) and self.pars["type"] == "single":
-            filepath = join(DATAPATH, "bpass_files", "bpass_sin-imf135_300_stellar_grids.fits")
+            fname = "bpass_sin-imf135_300_stellar_grids.fits"
         elif "type" in list(self.pars) and not self.pars["type"] == "binary":
-            raise ValueError(f"SPS model type `{self.pars['type']}` is not valid.")
+            fname = self.pars['type']
         else:
-            filepath = join(DATAPATH, "bpass_files", "bpass_bin-imf135_300_stellar_grids.fits")
+            fname = "bpass_bin-imf135_300_stellar_grids.fits"
 
-        # TODO - Add functionaility to ensure that the file selected is included in the data directory
+        # Building path to the BPASS stellar population models in the data folder
+        filepath = join(DATAPATH, "bpass_files", fname)
         
+        # Checking that the file exists
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"File `{fname}` does not exist in the directory " +\
+                                    f"`{join(DATAPATH, 'bpass_files')}`. If you need " +\
+                                     "to generate the file, please run the function " +\
+                                     "`make_bpass_stellar_file` from the `bpass` module.")
+
         ### OPENING FILES AND COLLECTING VALUES ###
         ###-------------------------------------###
 
@@ -1737,10 +1745,10 @@ class SpectrumMixin:
                          0.006, 0.008, 0.010, 0.014, 0.020, 0.030, 0.040])
         
         # Wavelengths of each point in the spectrum in units of Angstroms
-        self.wavelengths = fits.open(filepath)[-1].data
+        self.wavelengths = fits.open(filepath)[-1].data.astype(float) * u.AA
 
         # Ages of each SSP model in BPASS in Gyr
-        self.bpass_ages = fits.open(filepath)[-2].data
+        self.bpass_ages = fits.open(filepath)[-2].data.astype(float)
 
         # SSP stellar model grids, stored as FITS HDUList, with each HDU
         # representing a different metallicity. Axis 0 of each grid runs
@@ -1767,7 +1775,7 @@ class SpectrumMixin:
 
         # Using the SFH and CEH weightings to combine the SSP models into
         # a single CSP model
-        self.spectrum = np.zeros_like(self.wavelengths)
+        self.spectrum = np.zeros(len(self.wavelengths))
 
         # Looping over the metallicity SSP models
         for i, ssp_model in enumerate(ssp_grid):
@@ -1789,7 +1797,7 @@ class SpectrumMixin:
         try:
             Av = self.pars["dust_Av"]
         except:
-            raise ValueError("The model parameters dictionary needs " +\
+            raise KeyError("The model parameters dictionary needs " +\
                                "`dust_Av` to be a definied key.")
         
         # Applying dust attenuation to the spectrum
@@ -1799,7 +1807,7 @@ class SpectrumMixin:
         ###----------------------------------###
 
         # Calculating the tranmission function at the redshift of the object
-        tau = self.calc_igm_trans(self.redshift, self.wavelengths)
+        tau = self.calc_igm_trans(self.redshift, self.wavelengths.value)
 
         # Applying IGM attenuation to the spectrum
         self.spectrum *= np.exp(-tau)
@@ -1819,7 +1827,7 @@ class SpectrumMixin:
         # extinction values for high-latiude (i.e. excluding the Galactic
         # plan) extragalactic observations is 0.02-0.04 mags, so using this
         # and that Rv=3.1 for the Milky Way, apply Av=0.093 for the average.
-        self.spectrum = apply(fp99(self.wavelengths, gal_av), self.spectrum)
+        self.spectrum = apply(fp99(self.wavelengths.value, gal_av), self.spectrum)
 
         ### APPLYING REDSHIFT CORRECTIONS ###
         ###-------------------------------###
@@ -1837,7 +1845,7 @@ class SpectrumMixin:
                 self.ldist = dist
                   
             except:
-                raise ValueError("For a input redshift of 0, the model " +\
+                raise KeyError("For a input redshift of 0, the model " +\
                                  "parameter dictionary needs `ldist` " +\
                                  "to be a defined key in units of Mpc.")
         
@@ -1858,10 +1866,10 @@ class SpectrumMixin:
         # Redshifting the wavelengths
         self.wavelengths *= (1. + self.redshift)
 
-        # Adding unit label for wavelength
-        # self.wavelengths = fits.open(filepath)[-1].data * u.AA TODO fix later
-
-        # TODO Apply a mask to cut wavelength range down
+        # Applying a wavelength mask to remove storage of excess information
+        mask = (self.wavelengths.value > 1000) & (self.wavelengths.value < 7000)
+        self.wavelengths = self.wavelengths[mask]
+        self.spectrum = self.spectrum[mask]
 
 
     def _calc_xy(self):
