@@ -1752,7 +1752,8 @@ class SpectrumMixin:
 
         # SSP stellar model grids, stored as FITS HDUList, with each HDU
         # representing a different metallicity. Axis 0 of each grid runs
-        # over wavelength and axis 1 runs over age
+        # over wavelength and axis 1 runs over age. The units of the
+        # luminosity are L_solar/Angstrom/M_solar
         ssp_hdus = fits.open(filepath)[1:14]
 
         # Extracting the data arrays
@@ -1884,12 +1885,12 @@ class SpectrumMixin:
         ldistcm = self.ldist.to(u.cm).value
         
         # Calculating and applying the luminosity distance correction.
-        # The `3.85x10^33` if the conversion from solar bolometric luminoisty
+        # The `3.826x10^33` is the conversion from solar bolometric luminoisty
         # to ergs s^-1.
         # The (1+z) factor if the cosmological redshift correction between
         # observed and rest-frame quantities, specifically on the denominator
         # since the correction is for flux densities per unit wavelength
-        ldist_corr = 3.85e33 / (4 * np.pi * ldistcm * ldistcm * (1 + self.redshift))
+        ldist_corr = 3.826e33 / (4 * np.pi * ldistcm * ldistcm * (1 + self.redshift))
 
         # Converting from L_sun/A to ergs/s/A/cm^2
         self.spectrum *= ldist_corr
