@@ -498,9 +498,112 @@ class spec_attenuation:
   -------
     None
   """
+  def make_nebular_attenuation(self, sname, bc_ind):
+    """
+    Function used to calculate nebular attenuation. This function loads in the
+    nebular fits file created from Cloudy output files, and finds the desired
+    ionisation parameter value. It uses this along with the SFH and CEH profiles
+    to generate a nebular emission spectrum. This is nebular emission for stars
+    in their birth clouds, so is only applied to stars younger than the birth
+    cloud dispersion age.
+
+    Parameters
+    ----------
+      sname :: str
+        Name of the stellar models being used.
+
+      bc_ind :: int
+        Index for the maximum aged SSP BPASS model that is included in the
+        birth cloud and thus produces nebular emission
+
+    Attributes
+    ----------
+      nebular_spectrum :: array
+        The nebular emission spectrum for the given inputs, after applying
+        the SFH and CEH profile
+
+    Returns
+    -------
+      None
+    """
+    # Name of the nebular models being used
+    neb_fnam = "nebular_" + sname
+    filepath = join(DATAPATH, "bpass_files", neb_fnam)
+
+    # Checking that the file exists
+    if not os.path.exists(filepath):
+      raise FileNotFoundError(f"File `{neb_fnam}` does not exist in the directory " +\
+                              f"`{join(DATAPATH, 'bpass_files')}`. If you need " +\
+                                "to generate the Cloudy files, please run the " +\
+                                "functions `gen_cloudy_nebular_files` and " +\
+                                "`build_bpass_nebular_file` from the `bpass` module.")
+    
+    # Loading in the nebular model grids, stored as FITS HDUList,
+    # with each HDU representing a different metallicity and ionisation
+    # parameter. The order loops over ionisation parameter and then
+    # metallicity. The units of the luminosity are L_solar/AA/M_solar
+    ssp_hdus = fits.open(filepath)[1:14]
+
+    # Extracting the data arrays
+    ssp_grid = np.array([hdu.data.T for hdu in ssp_hdus])
+
+    # Nebular ionisation parameters used when generating the files
+    _, _, logUs, _ = _get_input_vals()
+
+    # Getting the input nebular ionisation parameter
+    U_val = self.pars["neb_logU"]
+
+    # Checking to ensure that it is within the bounds
+    if U_val < logUs[0] or U_val > logUs[-1]:
+      raise ValueError("The chosen nebular ionisation parameter of " +\
+                       f"{U_val} is outside the grid value limits. " +\
+                        f"Please ensure it is between {logUs[0]} " +\
+                          f"and {logUs[-1]}.")
+
+    # Getting the upper ionisation parameter grid point
+    up_ind = logUs[logUs < U_val].shape[0]
+
+    # If the lowest ionisation parameter is chosen:
+    if up_ind == 0:
+      # Set all the weighting for the lower value
+      up_ind = 1
+      up_wei = 0.
+    else:
+      # Split the weighting between the two nearest grid points
+
+      # Calculating the ionisation parameter bin width
+      U_width = logUs[up_ind] - logUs[up_ind - 1]
+
+      # Calculating the weighting for the upper ionisation grid point
+      up_wei = (U_val - logUs[up_ind - 1])/U_width
+    
+    # Setting up a blank grid to store the combined nebular emission spectrum
+    self.nebular_spectrum = np.zeros_like(len(self.wavelengths))
+
+    # Number of metallicity models
+    no_mets = len(self.mets)
+
+    # Looping over the metallicity grids
+    for i in range(no_mets):
+      if self.sfh_ceh_grid[i].sum() > 0.:
+        # Getting the two nebular grids that surround the chosen ionisation value
+        neb_grid_upp = ssp_grid[up_ind * no_mets + i]
+        neb_grid_low = ssp_grid[(up_ind - 1) * no_mets + i]
+
+        # Applying the SFH and CEH history profile
+        neb_spec_upp = np.sum(neb_grid_upp[:,:bc_ind] * 
+                              self.sfh_ceh_grid[i,:bc_ind], axis=1)
+        neb_spec_low = np.sum(neb_grid_low[:,:bc_ind] * 
+                              self.sfh_ceh_grid[i,:bc_ind], axis=1)
+        
+        # Combining the separate nebular spectra into one emission spectrum
+        self.nebular_spectrum += ((neb_spec_upp * up_wei) + 
+                                  (neb_spec_low * (1. - up_wei)))
+
+
   def make_dust_attenuation(self):
     """
-    Function use to calculate the dust attenuation. The function calls the desired
+    Function used to calculate the dust attenuation. The function calls the desired
     attenuation/extinction law based on the choosen model provided in the model
     parameter input dictionary.
 
