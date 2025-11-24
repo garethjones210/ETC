@@ -73,7 +73,8 @@ This includes the following classes and functions:
   - make_bpass_source
   - BPASS_spec
   - make_bpass_stellar_file
-  - make_bpass_nebular_file
+  - gen_cloudy_nebular_files
+  - build_bpass_nebular_file
 """
 
 import os
@@ -85,6 +86,7 @@ import numpy as np
 import astropy.units as u
 from astropy.cosmology import Planck18
 from astropy.io import fits
+from astropy.constants import c
 
 from .sources import Profiles, PointSource, ExtendedSource, GalaxySource
 from .filepaths import DATAPATH
@@ -1232,24 +1234,396 @@ def make_bpass_stellar_file(filepath, name_comp={}):
          f"in directory {join(DATAPATH, 'bpass_files')}")
   
 
-def make_bpass_nebular_file(filepath):
+def make_cloudy_in_file(stelname, hden, logU, met, logage):
   """
-  Makes the BPASS nebular fits file required to generate nebular emission
-  when running the BPASS spectrum generation code in FORECASTOR, storing
-  the generated fits file in the directory `/castor_etc/data/bpass_files/`.
-  This uses the BPASS generated nebular emission files, which are only
-  currently available on the BPASS website for v2.2.1. The BPASS nebular
-  files need to be downloaded from the BPASS website and stored in a
-  directory, which is passes as an argument to this function.
+  Makes the input file required for Cloudy to run with the desired inputs.
 
   Parameters
   ----------
-    filepath :: str
-      Path to the directory where the BPASS nebular files are stored
+    stelname :: str
+      Name of the BPASS stellar file used by Cloudy
+
+    hden :: float
+      Total hydrogen density at the face of the cloud, n(H) in units 
+      log(cm^-3)
+
+    logU :: float
+      Logarithmic ionization parameter at the face of the cloud
+
+    met :: float
+      Metallicity of the stellar population model being used in the
+      current Cloudy run
+
+    logage :: float
+      Age of the stellar population model being used in the current
+      Cloudy run, in units log(yr)
+
+  Returns
+  -------
+    None
+  """
+  # Converting metallicity relative to Solar metallicity, assuming
+  # Z_solar = 0.020 and taking the log of metallicity value
+  zmet = met/0.020
+  logmet = np.log10(met)
+
+  # Converting the age from logarithmic to linear scale
+  age = 10**logage
+
+  # Opening file to store the script in
+  f = open(f"t{logage:.1f}_Z{met:.1e}_U{logU:.1f}.in", "w+")
+
+  # Adding the BPASS SSP model to file
+  f.write("### INPUT SPECTRUM ###\n")
+  f.write(f"table star \"{stelname}\" {age} {logmet}\n")
+
+  # Adding the geometry to file
+  f.write("### GEOMETRY ###\n")
+  f.write("sphere\n")
+  f.write("covering factor 1.0 linear\n")
+
+  # Adding the physical conditions of the cloud to the file
+  f.write("### PHYSICAL CONDITIONS ###\n")
+  f.write(f"ionizing parameter {logU}\n")
+  f.write(f"hden {hden}\n")
+  #f.write(f"radius {radius}\n")
+  f.write("cosmic rays background\n")
+  f.write("abundances old solar 84\n")
+  f.write("grains ISM\n")
+  f.write(f"metals and grains {zmet}\n")
+
+  # Adding the stopping criteria to the file
+  f.write("### STOPPING CRITERIA ###\n")
+  f.write("iterate to convergence\n")
+  f.write("stop temperature 100 K\n")
+  f.write("stop efrac -2\n")
+
+  # Adding the desired output files to the file
+  f.write("### OUTPUT FILES ###\n")
+  f.write(f"set save prefix \"t{logage:.1f}_Z{met:.1e}_U{logU:.1f}\"\n")
+  f.write("save outward continuum last \".cont\" units angstrom\n")
+  f.write("save lines array last absolute \".lines\" units angstrom\n")
+
+  # Closing the file and returning the file name
+  f.close()
+  return f.name
+
+
+def _get_input_vals():
+  """
+  Holds the input parameter values for the ionisation parameter,
+  metallicity, and ages used when running Cloudy to generated a
+  nebular grid. This function is called by `gen_cloudy_nebular_files'
+  and `build_bpass_nebular_grid.
+
+  Returns
+  -------
+    ages :: array
+      An array of model ages, in units log(yr)
+
+    mets :: array
+      An array of model metallicities
+
+    met_nams :: array
+      An array of model metallicity names used in BPASS
+
+    logUs :: array
+      An array of ionisation parameters
+  """
+  # The ages of the BPASS SSP models
+  ages = np.arange(6.0, 8.1, 0.1)
+
+  # The metallicities of the BPASS SSP models
+  mets = np.array([1.e-5, 1.e-4, 0.001, 0.002, 0.003, 0.004,
+                    0.006, 0.008, 0.010, 0.014, 0.020, 0.030, 0.040])
+  
+  # Metallicity value names used in the BPASS file names
+  met_nams = ["zem5", "zem4", "z001", "z002", "z003", "z004",
+              "z006", "z008", "z010", "z014", "z020", "z030", "z040"]
+
+  # The values of the logarithmic ionization parameter at the face 
+  # of the cloud at which models are to be run
+  logUs = np.arange(-4.0, 0.0, 0.5)
+
+  return ages, mets, logUs, met_nams
+  
+
+def gen_cloudy_nebular_files(pars):
+  """
+  Makes the Cloudy nebular output files require to generate the BPASS
+  nebular emission grid required to generate nebular emission in the
+  FORECASTOR code. This runs over all metallicities, ages, and nebular
+  ionisation parameters as set in the variables below. These output
+  files can then be used by the function `build_bpass_nebular_file' to
+  generate the grid.
+
+  Parameters
+  ----------
+    pars :: dict
+      Dictionary holding all the inputs required to run the code
+      (includes the keys "stel_model", "version", "imf", "type",
+      "alpha", "hden", "path", "fore_bmodel").
   
   Returns
   -------
     None
   """
-  #TODO
+  ### Making and changing into a new direcotry ###
+  # Getting the directory under which to store the Cloudy files
+  if "path" in list(pars):
+    dir_path = pars["path"]
+  else:
+    dir_path = DATAPATH
+
+  # Changing into the direcotry
+  os.chdir(dir_path)
+
+  # Making a new storage directory for the Cloudy files
+  os.mkdir(os.getcwd() + "/cloudy_bpass_files")
+
+  # Changing into the Cloudy files directory
+  os.chdir("cloudy_bpass_files")
+  
+  ### Setting up variables and getting inputs ###
+  # Getting the values from the function where the values are contained
+  ages, mets, logUs, _ = _get_input_vals()
+  
+  # Getting the stellar model name for which the nebular files are
+  # being made
+  if "stel_model" in list(pars):
+    mod_nam = pars["stel_model"]
+  else:
+    # Creating the stellar model name using individual inputs for
+    # each component, checking that each component is included
+    if "version" not in list(pars):
+      KeyError("To generate the BPASS file name used by Cloudy, " +\
+               "the parameters dictionary needs `version` to be a definied key.")
+    if "imf" not in list(pars):
+      KeyError("To generate the BPASS file name used by Cloudy, " +\
+               "the parameters dictionary needs `imf` to be a definied key.")
+    if "type" not in list(pars):
+      KeyError("To generate the BPASS file name used by Cloudy, " +\
+               "the parameters dictionary needs `type` to be a definied key.")
+    if pars["version"] == "v2.3" and "alpha" not in list(pars):
+      KeyError("To generate the v2.3 BPASS file name used by Cloudy, " +\
+               "the parameters dictionary needs `alpha` to be a definied key.")
+      
+    if pars["version"] == "v2.3":
+      mod_nam = ("BPASS" + pars["version"] + "_" + pars["imf"] + "." +
+                 pars["alpha"] + "_burst_" + pars["type"] + ".ascii")
+    else:
+      mod_nam = ("BPASS" + pars["version"] + "_" + pars["imf"] +
+                 "_burst_" + pars["type"] + ".ascii")
+  #TODO check these exist in the correct data folder (potentially?)
+
+  # Getting the total hydrogen density at the face of the clouds
+  try:
+    hden = pars["hden"]
+  except:
+    raise KeyError("The parameters dictionary needs " +\
+                         "`hden` to be a definied key.")
+  
+  ### Running Cloudy ###
+  # Looping over the metallicities, ages and ionisations
+  for _, U in enumerate(logUs):
+    # Making a direcotry for the current ionisation if it does not exist
+    if not os.path.exists(os.getcwd() + f"/logU_{U:.1f}"):
+      os.mkdir(os.getcwd() + f"/logU_{U:.1f}")
+    
+    # Changing into the directory for current ionisation
+    os.chdir(f"logU_{U:.1f}")
+
+    for _, Z in enumerate(mets):
+      # Making a directory for the current metallicity if it does not exist
+      if not os.path.exists(os.getcwd() + f"/met_{Z:.1e}"):
+        os.mkdir(os.getcwd() + f"/met_{Z:.1e}")
+
+      # Changing into the directory for the current metallicity
+      os.chdir(f"met_{Z:.1e}")
+
+      # Printing the current run
+      print(f"Running metallicity {Z:.1e} with ionisation {U:.1f}")
+
+      for _, T in enumerate(ages):
+        # Generating the input file
+        fnam = make_cloudy_in_file(mod_nam, hden, U, Z, T)
+
+        # Running Cloudy on the model
+        if not os.path.exists(os.getcwd() + f"/t{T:.1f}_Z{Z:.1e}_U{U:.1f}.cont"):
+          os.system(os.environ["CLOUDY_EXE"] + f" -r {fnam[:-3]}")
+        # TODO add in a function to check whats been done in case the program crashes
+
+      # Changing out of the current metallicity directory
+      os.chdir("../")
+    
+    # Changing out of the current ionisation directory
+    os.chdir("../")
+
+
+def build_bpass_nebular_file(pars):
+  """
+  Makes the BPASS nebular fits file required to generate nebular emission
+  in FORECASTOR, storing the generated fits file in the directory 
+  `/castor_etc/data/bpass_files/'. This uses the Cloudy output files
+  generated from the function `gen_cloudy_nebular_files'.
+
+  Parameters
+  ----------
+    pars :: dict
+      Dictionary holding all the inputs required to run the code
+      (includes the keys "stel_model", "version", "imf", "type",
+      "alpha", "hden", "path", "fore_bmodel").
+  
+  Returns
+  -------
+    None
+  """
+  ### Changing into the direcotry where Cloudy files are stored ###
+  # Getting the directory under which the Cloudy files are stored
+  if "path" in list(pars):
+    dir_path = pars["path"]
+  else:
+    dir_path = DATAPATH
+
+  # Changing into the direcotry
+  os.chdir(join(dir_path, "cloudy_bpass_files"))
+  
+  ### Setting up variables and getting inputs ###
+  # Getting the values from the function where the values are contained
+  ages, mets, logUs, met_nams = _get_input_vals()
+
+  # Getting the BPASS file name stored in FORECASTOR
+  if "fore_bmodel" in list(pars):
+    fname = pars["fore_bmodel"]
+  
+  # If not directly including, building name from components
+  else:
+    # Checking that the correct component parts have been included
+    if "version" not in list(pars):
+      KeyError("To generate the BPASS file name used by Cloudy, " +\
+               "the parameters dictionary needs `version` to be a definied key.")
+    if "imf" not in list(pars):
+      KeyError("To generate the BPASS file name used by Cloudy, " +\
+               "the parameters dictionary needs `imf` to be a definied key.")
+    if "type" not in list(pars):
+      KeyError("To generate the BPASS file name used by Cloudy, " +\
+               "the parameters dictionary needs `type` to be a definied key.")
+    if pars["version"] == "v2.3" and "alpha" not in list(pars):
+      KeyError("To generate the v2.3 BPASS file name used by Cloudy, " +\
+               "the parameters dictionary needs `alpha` to be a definied key.")
+      
+    # Building the model name
+    if pars["version"] == "v2.2.1":
+      fname = ("bpass_" + pars["type"][:3] + "-" + pars["imf"] + "stellar_grids.fits")
+    
+    elif pars["version"] == "v2.3":
+      fname = ("bpass_" + pars["type"][:3] + "-" + pars["imf"] + 
+                "_" + pars["alpha"] + "stellar_grids.fits")
+
+    else:
+      ValueError(f"Version input of `{pars['version']}` is not valid. " +
+                  "Please use either `v2.2.1` or `v2.3`.")
+      
+  # Building path to the BPASS stellar population models in the data folder
+  filepath = join(DATAPATH, "bpass_files", fname)
+  
+  # Checking that the file exists
+  if not os.path.exists(filepath):
+      raise FileNotFoundError(f"File `{fname}` does not exist in the directory " +\
+                              f"`{join(DATAPATH, 'bpass_files')}`. If you need " +\
+                                "to generate the file, please run the function " +\
+                                "`make_bpass_stellar_file` from the `bpass` module.")
+  
+  # Opening the BPASS stellar model file
+  # Wavelengths of each point in the spectrum in units of Angstroms
+  wavs = fits.open(filepath)[-1].data.astype(float)
+
+  # SSP stellar model grids, stored as FITS HDUList, with each HDU
+  # representing a different metallicity. Axis 0 of each grid runs
+  # over wavelength and axis 1 runs over age. The units of the
+  # luminosity are L_solar/Angstrom/M_solar
+  ssp_hdus = fits.open(filepath)[1:14]
+
+  # Extracting the data arrays
+  ssp_grid = np.array([hdu.data.T for hdu in ssp_hdus])
+
+  ### Looping over the Cloudy files and extracting information ###
+  # Making a fits hdu list under which to store the results
+  list_of_hdus = [fits.PrimaryHDU()]
+
+  # Looping over the ionisation parameter
+  for _, U in enumerate(logUs):
+    # Changing into the directory for current ionisation
+    os.chdir(f"logU_{U:.1f}")
+
+    # Looping over the metallicity values
+    for i, Z in enumerate(mets):
+      # Changing into the directory for the current metallicity
+      os.chdir(f"met_{Z:.1e}")
+
+      # Creating a storage array for this grid
+      neb_grid = np.zeros((len(ages), len(wavs)))
+
+      # Looping over the SSP age values
+      for j, T in enumerate(ages):
+        # Model run file prefix name
+        prefix = f"t{T:.1f}_Z{Z:.1e}_U{U:.1f}"
+
+        # Opening the Cloudy continuum file and reversing to get increasing wavelength
+        cont_data = np.loadtxt(prefix + ".cont", usecols=(0, 3, 8))[::-1,:]
+        # TODO remove column 8 if not needed because not doing line removal
+
+        # Getting the input spectrum used by Cloudy for normalisation
+        incident_in = np.loadtxt(prefix + ".cont", usecols=(1))[::-1]
+
+        # Dividing by wavelength and Solar luminoisty to convert units 
+        # from ergs/s to L_sun/AA
+        cont_wavs = cont_data[:,0]
+        cont_flux = cont_data[:,1]/(cont_wavs * 3.826e33)
+        incident_in /= (cont_wavs * 3.826e33)
+
+        # Getting the BPASS input spectrum for this model, which are in
+        # units of L_sun/AA/M_sol
+        b_spec = ssp_grid[i,:,j]
+
+        # Normalising with respect to the flux at 5500 Angstroms
+        bf_mask = (wavs == 5500.)
+        bf = b_spec[bf_mask][0]
+        cf = np.interp(5500, cont_wavs, incident_in)
+
+        # Normalising with respect to the flux between 4500-5500 Angstroms
+        # bf_mask = (wavs >= 4500.) & (wavs <= 5500.)
+        # cf_mask = (cont_wavs >= 4500.) & (cont_wavs <= 5500.)
+        # bf = np.trapezoid(b_spec[bf_mask], x=wavs[bf_mask])
+        # cf = np.trapezoid(incident_in[cf_mask], x=cont_wavs[cf_mask])
+        # TODO confirm which normalisation to do (i.e. 5500, 45-5500, <918AA)
+
+        # Normalising the Cloudy output spectra
+        cont_flux *= bf/cf
+
+        # Interpolating onto the BPASS wavelength grid
+        neb_grid[j] = np.interp(wavs, cont_wavs, cont_flux)
+
+      # Name for the current fits HDU lists
+      neb_nam = ("met_" + met_nams[i] + f"_logU_{U:.1f}")
+      
+      # Creating a fits HDU list for this nebular grid
+      neb_hdu = fits.ImageHDU(name=neb_nam, data=neb_grid)
+
+      # Appending to list
+      list_of_hdus.append(neb_hdu)
+
+      # Changing out of the current metallicity directory
+      os.chdir("../")
+    
+    # Changing out of the current ionisation directory
+    os.chdir("../")
+
+  # Fits file save location and file name
+  sav_nam = "nebular_" + fname
+  sav_loc = join(DATAPATH, "bpass_files", sav_nam)
+
+  # Converting and saving the final HDU grids to a fits file
+  hdulist = fits.HDUList(hdus=list_of_hdus)
+  hdulist.writeto(sav_loc, overwrite=True)
 
