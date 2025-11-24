@@ -1784,11 +1784,11 @@ class SpectrumMixin:
         if "bc_age" in list(self.pars):
             bc_age = self.pars["bc_age"] * 1.e6
         else:
-            bc_age = 0.
+            bc_age = 1.e7
 
         # Getting the maximum aged SSP BPASS model that is included in the
         # birth cloud to create a spectrum during and after the birth cloud
-        bc_ind = len([x for x in self.bpass_ages if x < bc_age])
+        bc_ind = len([x for x in self.bpass_ages if x <= bc_age])
 
         # Looping over the metallicity SSP models
         for i, ssp_model in enumerate(ssp_grid):
