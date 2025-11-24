@@ -1802,7 +1802,16 @@ class SpectrumMixin:
         ### NEBULAR ATTENUATION ###
         ###---------------------###
 
-        # TODO Nebular
+        # Calculating the nebular emission spectrum
+        if "neb_logU" in list(self.pars):
+            self.make_nebular_attenuation(fname, bc_ind)
+
+            # All stellar emission in the birth cloud goes into the nebular emission
+            spectrum_bc[self.wavelengths < 911.8] = 0.
+            # TODO check whether this is the correct thing to do
+
+            # Applying nebular emission
+            spectrum_bc += self.nebular_spectrum
 
         ### DUST ATTENUATION ###
         ###------------------###
