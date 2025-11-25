@@ -84,7 +84,6 @@ from os.path import join
 
 import numpy as np
 import astropy.units as u
-from astropy.cosmology import Planck18
 from astropy.io import fits
 from astropy.constants import c
 
@@ -1151,16 +1150,7 @@ def make_bpass_source(base_source, model_parameters):
       ----------
         pars :: dict
           Dictionary containing the model parameters to generate a BPASS spectrum.
-          Keys are strings and values are floats.
-
-        redshift :: float
-          The redshift of the object for which an emission spectrum is being generated
-        
-        uni_age :: float
-          Age of the Universe at the redshift of the object, in units of Gyr
-
-        ldist :: float
-          Luminosity distance to the object at the inputted redshift, in Mpc
+          Keys are strings and values are a mixture of floats and strings.
       
       Returns
       -------
@@ -1169,28 +1159,8 @@ def make_bpass_source(base_source, model_parameters):
       # Storing the model parameter dictionary as part of the class
       self.pars = model_parameters
 
-      # Checking that a redshift has been included as one of the parameters
-      # and is a float greater than one
-      try:
-        self.redshift = self.pars['redshift']
-      except:
-        raise KeyError("The model parameters dictionary needs " +\
-                         "`redshift` to be a definied key.")
-      
-      if not (self.redshift >= 0.):
-        raise ValueError("The model parameter `redshift` needs to be " +\
-                          "a float value greater than or equal to 0.")
-      
       # Initialising the main source
       super().__init__(*args, **kwargs)
-
-      # Using the Planck18 comoslogy from astropy to calculate properties
-      # at the inputted redshift
-      # Age of the Universe at the given redshift in Gyr
-      self.uni_age = Planck18.age(self.redshift).value
-
-      # Luminoisty distance at the given redshift in Mpc
-      self.ldist = Planck18.luminosity_distance(self.redshift)
 
       # Generating the spectrum from the function in the spectrum.py program
       self.gen_bpass_spec()

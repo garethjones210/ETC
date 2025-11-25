@@ -92,6 +92,7 @@ import numpy as np
 import pandas as pd
 from astropy.constants import R_sun, pc
 from astropy.coordinates import SkyCoord
+from astropy.cosmology import Planck18
 from astropy.io import fits
 from astropy.wcs import WCS
 from astroquery.gaia import Gaia
@@ -1686,6 +1687,9 @@ class SpectrumMixin:
 
           spectrum :: array of floats
             BPASS emission spectrum template, in units of flam (erg/s/cm^2/AA).
+          
+          uni_age :: float
+            Age of the Universe at the redshift of the object, in units of Gyr
         
         Returns
         -------
@@ -1706,6 +1710,21 @@ class SpectrumMixin:
 
         ### CHECKING INPUTS ###
         ###-----------------###
+        # Checking that a redshift has been included as one of the parameters
+        # and is a float greater than one
+        try:
+          redshift = self.pars['redshift']
+        except:
+          raise KeyError("The model parameters dictionary needs " +\
+                          "`redshift` to be a definied key.")
+        
+        if not (redshift >= 0.):
+          raise ValueError("The model parameter `redshift` needs to be " +\
+                            "a float value greater than or equal to 0.")
+      
+        # Using the Planck18 comoslogy from astropy to calculate the 
+        # age of the Universe at the given redshift in Gyr
+        self.uni_age = Planck18.age(redshift).value
 
         # Checking that the age is included and not larger than the age of the Universe
         try:
@@ -1717,7 +1736,7 @@ class SpectrumMixin:
             raise ValueError(f"The inputted age of {pop_age} Gyr is " +\
                               "greater than the age of the Universe " +\
                               f"({round(self.uni_age, 3)} Gyr) at redshift " +\
-                              f"{self.redshift}")
+                              f"{redshift}")
 
         # Getting the in the BPASS file name
         if "type" in list(self.pars) and self.pars["type"] == "single":
@@ -1848,7 +1867,7 @@ class SpectrumMixin:
         ###----------------------------------###
 
         # Calculating the tranmission function at the redshift of the object
-        tau = self.calc_igm_trans(self.redshift, self.wavelengths.value)
+        tau = self.calc_igm_trans(redshift, self.wavelengths.value)
 
         # Applying IGM attenuation to the spectrum
         self.spectrum *= np.exp(-tau)
@@ -1876,22 +1895,22 @@ class SpectrumMixin:
         # Applying luminoisty distance correction
         # If the redshift is set as zero, then a luminoisty distance needs
         # to be provided
-        if self.redshift == 0.:
+        if redshift == 0.:
             try:
-              dist = self.pars["ldist"]
+              ldist = self.pars["ldist"]
               # If only value provided, convert to Mpc
-              if not isinstance(dist, u.Quantity):
-                self.ldist = (dist * u.Mpc)
-              else:
-                self.ldist = dist
-                  
+              if not isinstance(ldist, u.Quantity):
+                ldist = (ldist * u.Mpc)                  
             except:
                 raise KeyError("For a input redshift of 0, the model " +\
                                  "parameter dictionary needs `ldist` " +\
                                  "to be a defined key in units of Mpc.")
+        else:
+          # Luminoisty distance at the given redshift in Mpc
+          ldist = Planck18.luminosity_distance(redshift)
         
         # Converting the distance from Mpc to cm
-        ldistcm = self.ldist.to(u.cm).value
+        ldistcm = ldist.to(u.cm).value
         
         # Calculating and applying the luminosity distance correction.
         # The `3.826x10^33` is the conversion from solar bolometric luminoisty
@@ -1899,13 +1918,13 @@ class SpectrumMixin:
         # The (1+z) factor if the cosmological redshift correction between
         # observed and rest-frame quantities, specifically on the denominator
         # since the correction is for flux densities per unit wavelength
-        ldist_corr = 3.826e33 / (4 * np.pi * ldistcm * ldistcm * (1 + self.redshift))
+        ldist_corr = 3.826e33 / (4 * np.pi * ldistcm * ldistcm * (1 + redshift))
 
         # Converting from L_sun/A to ergs/s/A/cm^2
         self.spectrum *= ldist_corr
 
         # Redshifting the wavelengths
-        self.wavelengths *= (1. + self.redshift)
+        self.wavelengths *= (1. + redshift)
 
         # Applying a wavelength mask to remove storage of excess information
         mask = (self.wavelengths.value > 1000.) & (self.wavelengths.value < 7000.)
