@@ -1850,11 +1850,8 @@ class SpectrumMixin:
         else:
             eta = 1.
             if bc_age > 0.:
-                print("A birth cloud age has been set using the `bc_age` " +\
-                      "input. However, there is no input for the extra " +\
-                      "dust attenuation factor. Please set this using " +\
-                      "the key `bc_fact`. Using default of 1 (i.e. zero " +\
-                      "difference to the ISM dust attenuation.")
+                print("An extra dust attenuation factor can be set using" +\
+                      "the key `bc_fact`. Using default value of 1.")
         
         # Applying dust attenuation to the spectrum
         self.spectrum *= 10**(-0.4 * Av * self.Alam)
