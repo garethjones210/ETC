@@ -541,7 +541,7 @@ class spec_attenuation:
     # with each HDU representing a different metallicity and ionisation
     # parameter. The order loops over ionisation parameter and then
     # metallicity. The units of the luminosity are L_solar/AA/M_solar
-    ssp_hdus = fits.open(filepath)[1:14]
+    ssp_hdus = fits.open(filepath)[1:]
 
     # Extracting the data arrays
     ssp_grid = np.array([hdu.data.T for hdu in ssp_hdus])
@@ -577,7 +577,7 @@ class spec_attenuation:
       up_wei = (U_val - logUs[up_ind - 1])/U_width
     
     # Setting up a blank grid to store the combined nebular emission spectrum
-    self.nebular_spectrum = np.zeros_like(len(self.wavelengths))
+    self.nebular_spectrum = np.zeros(len(self.wavelengths))
 
     # Number of metallicity models
     no_mets = len(self.mets)

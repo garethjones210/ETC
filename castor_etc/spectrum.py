@@ -1826,7 +1826,7 @@ class SpectrumMixin:
             self.make_nebular_attenuation(fname, bc_ind)
 
             # All stellar emission in the birth cloud goes into the nebular emission
-            spectrum_bc[self.wavelengths < 911.8] = 0.
+            spectrum_bc[self.wavelengths.value < 911.8] = 0.
             # TODO check whether this is the correct thing to do
 
             # Applying nebular emission
